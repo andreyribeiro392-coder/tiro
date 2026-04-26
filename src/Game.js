@@ -1,9 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
-/* =========================
-   STATE
-========================= */
-
 let cars = [];
 let keys = {};
 
@@ -15,10 +11,6 @@ let turnSpeed = 0.03;
 
 let angle = 0;
 
-/* =========================
-   INIT
-========================= */
-
 export function initGame(scene, camera, player) {
 
   document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
@@ -26,11 +18,12 @@ export function initGame(scene, camera, player) {
 
   createMap(scene);
   spawnCars(scene);
-}
 
-/* =========================
-   MAPA
-========================= */
+  // CARRO DO PLAYER VISUAL
+  const playerCar = createCarMesh(0x00ffcc);
+  scene.add(playerCar);
+  player.mesh = playerCar;
+}
 
 function createMap(scene) {
 
@@ -41,49 +34,7 @@ function createMap(scene) {
 
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
-
-  // linhas de pista fake
-  for (let i = 0; i < 50; i++) {
-
-    const line = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.1, 5),
-      new THREE.MeshBasicMaterial({ color: 0xffffff })
-    );
-
-    line.position.set(0, 0.05, i * 10 - 250);
-    scene.add(line);
-  }
 }
-
-/* =========================
-   SPAWN CARROS IA
-========================= */
-
-function spawnCars(scene) {
-
-  for (let i = 0; i < 5; i++) {
-
-    const mesh = createCarMesh(0xff0000);
-
-    mesh.position.set(
-      (Math.random() - 0.5) * 100,
-      0.5,
-      (Math.random() - 0.5) * 100
-    );
-
-    scene.add(mesh);
-
-    cars.push({
-      mesh,
-      speed: 0.5 + Math.random() * 0.5,
-      angle: Math.random() * Math.PI * 2
-    });
-  }
-}
-
-/* =========================
-   CAR MODEL
-========================= */
 
 function createCarMesh(color) {
 
@@ -107,15 +58,29 @@ function createCarMesh(color) {
   return car;
 }
 
-/* =========================
-   UPDATE
-========================= */
+function spawnCars(scene) {
+
+  for (let i = 0; i < 5; i++) {
+
+    const mesh = createCarMesh(0xff0000);
+
+    mesh.position.set(
+      (Math.random() - 0.5) * 100,
+      0.5,
+      (Math.random() - 0.5) * 100
+    );
+
+    scene.add(mesh);
+
+    cars.push({
+      mesh,
+      speed: 0.5 + Math.random() * 0.5,
+      angle: Math.random() * Math.PI * 2
+    });
+  }
+}
 
 export function updateGame(scene, camera, player) {
-
-  /* =========================
-     CONTROLE DO CARRO
-  ========================= */
 
   if (keys["w"]) speed += acceleration;
   if (keys["s"]) speed -= acceleration;
@@ -132,10 +97,6 @@ export function updateGame(scene, camera, player) {
     if (keys["d"]) angle -= turnSpeed;
   }
 
-  /* =========================
-     MOVIMENTO
-  ========================= */
-
   const forward = new THREE.Vector3(
     Math.sin(angle),
     0,
@@ -146,21 +107,20 @@ export function updateGame(scene, camera, player) {
 
   player.rotation.y = angle;
 
-  /* =========================
-     CÂMERA DE CORRIDA
-  ========================= */
+  // atualiza mesh do player
+  if (player.mesh) {
+    player.mesh.position.copy(player.position);
+    player.mesh.rotation.y = angle;
+  }
 
+  // câmera
   const camOffset = new THREE.Vector3(0, 4, -8)
     .applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
 
   camera.position.copy(player.position).add(camOffset);
-
   camera.lookAt(player.position);
 
-  /* =========================
-     IA DOS CARROS
-  ========================= */
-
+  // IA
   for (let c of cars) {
 
     const dir = new THREE.Vector3(
@@ -171,22 +131,13 @@ export function updateGame(scene, camera, player) {
 
     c.mesh.position.add(dir.multiplyScalar(c.speed));
 
-    // leve curva automática
     c.angle += (Math.random() - 0.5) * 0.02;
-
     c.mesh.rotation.y = c.angle;
 
-    // evitar sair do mapa
     if (c.mesh.position.length() > 200) {
       c.angle += Math.PI;
     }
   }
 }
 
-/* =========================
-   SHOOT (REMOVIDO)
-========================= */
-
-export function shoot() {
-  // não usado em jogo de carro
-}
+export function shoot() {}
