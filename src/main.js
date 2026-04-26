@@ -1,74 +1,81 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-let scene, camera, renderer;
-let keys = {};
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
 
-export let player = {
-  x: 0,
-  y: 1.6,
-  z: 5,
-  velocity: new THREE.Vector3(),
-  speed: 0.15,
-  hp: 100
-};
-
-init();
-animate();
-
-document.addEventListener("keydown", (e) => keys[e.key.toLowerCase()] = true);
-document.addEventListener("keyup", (e) => keys[e.key.toLowerCase()] = false);
-
-document.addEventListener("click", () => {
-  document.body.requestPointerLock();
-  shoot(scene, camera, player);
-});
-
-document.addEventListener("mousemove", (e) => {
-  if (document.pointerLockElement === document.body) {
-    camera.rotation.y -= e.movementX * 0.002;
-    camera.rotation.x -= e.movementY * 0.002;
-  }
-});
-
-function init() {
-  scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
-  renderer = new THREE.WebGLRenderer();
+  renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  camera.position.set(0, 1.6, 5);
+  camera.position.copy(player.position);
 
-  // ground
-  const geo = new THREE.PlaneGeometry(200, 200);
-  const mat = new THREE.MeshBasicMaterial({ color: 0x222222 });
-  const ground = new THREE.Mesh(geo, mat);
+  // chão
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshBasicMaterial({ color: 0x222222 })
+  );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  gameInit(scene);
+  initGame(scene);
+  initApp();
+
+  setupControls();
+}
+
+function setupControls() {
+  document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+  document.body.addEventListener("click", () => {
+    document.body.requestPointerLock();
+    shoot(scene, camera, player);
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (document.pointerLockElement === document.body) {
+      mouseX -= e.movementX * AppState.settings.sensitivity;
+      mouseY -= e.movementY * AppState.settings.sensitivity;
+    }
+  });
+
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 }
 
 function updatePlayer() {
+  let forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0,1,0), mouseX);
+  let right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), mouseX);
+
   let dir = new THREE.Vector3();
 
-  if (keys["w"]) dir.z -= 1;
-  if (keys["s"]) dir.z += 1;
-  if (keys["a"]) dir.x -= 1;
-  if (keys["d"]) dir.x += 1;
+  if (keys["w"]) dir.add(forward);
+  if (keys["s"]) dir.sub(forward);
+  if (keys["a"]) dir.sub(right);
+  if (keys["d"]) dir.add(right);
 
-  dir.applyAxisAngle(new THREE.Vector3(0,1,0), camera.rotation.y);
+  dir.normalize();
+
   player.velocity.add(dir.multiplyScalar(player.speed));
-
   player.velocity.multiplyScalar(0.85);
 
-  camera.position.add(player.velocity);
+  player.position.add(player.velocity);
+
+  camera.position.copy(player.position);
+  camera.rotation.y = mouseX;
 }
 
 function animate() {
   requestAnimationFrame(animate);
 
   updatePlayer();
-  gameUpdate(scene, camera, player);
+  updateGame(scene, camera, player);
 
   renderer.render(scene, camera);
 }
