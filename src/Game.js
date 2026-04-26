@@ -1,15 +1,14 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
-let cars = [];
 let keys = {};
+let cars = [];
 
 let speed = 0;
-let maxSpeed = 1.2;
-let acceleration = 0.03;
-let friction = 0.02;
-let turnSpeed = 0.03;
-
 let angle = 0;
+
+let nitro = 100;
+
+/* ========================= */
 
 export function initGame(scene, camera, player) {
 
@@ -17,84 +16,113 @@ export function initGame(scene, camera, player) {
   document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
   createMap(scene);
-  spawnCars(scene);
 
-  // CARRO DO PLAYER VISUAL
-  const playerCar = createCarMesh(0x00ffcc);
-  scene.add(playerCar);
-  player.mesh = playerCar;
+  // player car
+  const car = createCar(0x00ffcc);
+  scene.add(car);
+  player.mesh = car;
+
+  spawnAI(scene);
 }
+
+/* ========================= */
 
 function createMap(scene) {
 
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(500, 500),
-    new THREE.MeshBasicMaterial({ color: 0x1e1e1e })
+    new THREE.PlaneGeometry(1000, 1000),
+    new THREE.MeshStandardMaterial({ color: 0x222222 })
   );
 
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
+
+  // linhas de pista
+  for (let i = 0; i < 100; i++) {
+
+    const line = new THREE.Mesh(
+      new THREE.BoxGeometry(0.2, 0.05, 4),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+
+    line.position.set(0, 0.03, i * 10 - 500);
+    scene.add(line);
+  }
 }
 
-function createCarMesh(color) {
+/* ========================= */
+
+function createCar(color) {
 
   const car = new THREE.Group();
 
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(1.5, 0.5, 3),
-    new THREE.MeshBasicMaterial({ color })
+    new THREE.MeshStandardMaterial({ color, metalness:0.3, roughness:0.6 })
   );
 
-  const top = new THREE.Mesh(
-    new THREE.BoxGeometry(1.2, 0.5, 1.5),
-    new THREE.MeshBasicMaterial({ color: 0x333333 })
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(1.2, 0.6, 1.5),
+    new THREE.MeshStandardMaterial({ color:0x111111 })
   );
 
-  top.position.y = 0.5;
+  cabin.position.y = 0.6;
 
   car.add(body);
-  car.add(top);
+  car.add(cabin);
 
   return car;
 }
 
-function spawnCars(scene) {
+/* ========================= */
 
-  for (let i = 0; i < 5; i++) {
+function spawnAI(scene) {
 
-    const mesh = createCarMesh(0xff0000);
+  for (let i = 0; i < 6; i++) {
 
-    mesh.position.set(
-      (Math.random() - 0.5) * 100,
+    const car = createCar(0xff0000);
+
+    car.position.set(
+      (Math.random() - 0.5) * 200,
       0.5,
-      (Math.random() - 0.5) * 100
+      (Math.random() - 0.5) * 200
     );
 
-    scene.add(mesh);
+    scene.add(car);
 
     cars.push({
-      mesh,
-      speed: 0.5 + Math.random() * 0.5,
-      angle: Math.random() * Math.PI * 2
+      mesh: car,
+      angle: Math.random() * Math.PI * 2,
+      speed: 0.4 + Math.random() * 0.4
     });
   }
 }
 
+/* ========================= */
+
 export function updateGame(scene, camera, player) {
 
-  if (keys["w"]) speed += acceleration;
-  if (keys["s"]) speed -= acceleration;
+  // aceleração
+  if (keys["w"]) speed += 0.03;
+  if (keys["s"]) speed -= 0.03;
 
-  if (!keys["w"] && !keys["s"]) {
-    if (speed > 0) speed -= friction;
-    if (speed < 0) speed += friction;
+  // nitro
+  if (keys["shift"] && nitro > 0) {
+    speed += 0.05;
+    nitro -= 0.5;
+  } else {
+    nitro += 0.2;
   }
 
-  speed = Math.max(-0.6, Math.min(maxSpeed, speed));
+  nitro = Math.max(0, Math.min(100, nitro));
 
+  // atrito
+  speed *= 0.98;
+
+  // direção
   if (Math.abs(speed) > 0.05) {
-    if (keys["a"]) angle += turnSpeed;
-    if (keys["d"]) angle -= turnSpeed;
+    if (keys["a"]) angle += 0.03;
+    if (keys["d"]) angle -= 0.03;
   }
 
   const forward = new THREE.Vector3(
@@ -104,20 +132,21 @@ export function updateGame(scene, camera, player) {
   );
 
   player.position.add(forward.multiplyScalar(speed));
-
   player.rotation.y = angle;
 
-  // atualiza mesh do player
-  if (player.mesh) {
-    player.mesh.position.copy(player.position);
-    player.mesh.rotation.y = angle;
-  }
+  // atualiza mesh
+  player.mesh.position.copy(player.position);
+  player.mesh.rotation.y = angle;
 
-  // câmera
-  const camOffset = new THREE.Vector3(0, 4, -8)
-    .applyAxisAngle(new THREE.Vector3(0, 1, 0), angle);
+  // câmera suave
+  const camOffset = new THREE.Vector3(0, 5, -10)
+    .applyAxisAngle(new THREE.Vector3(0,1,0), angle);
 
-  camera.position.copy(player.position).add(camOffset);
+  camera.position.lerp(
+    player.position.clone().add(camOffset),
+    0.1
+  );
+
   camera.lookAt(player.position);
 
   // IA
@@ -133,11 +162,12 @@ export function updateGame(scene, camera, player) {
 
     c.angle += (Math.random() - 0.5) * 0.02;
     c.mesh.rotation.y = c.angle;
-
-    if (c.mesh.position.length() > 200) {
-      c.angle += Math.PI;
-    }
   }
-}
 
-export function shoot() {}
+  // HUD
+  const speedEl = document.getElementById("speed");
+  const nitroEl = document.getElementById("nitro");
+
+  if (speedEl) speedEl.innerText = "Speed: " + Math.floor(speed * 100);
+  if (nitroEl) nitroEl.innerText = "Nitro: " + Math.floor(nitro);
+}
