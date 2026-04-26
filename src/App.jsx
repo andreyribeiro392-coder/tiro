@@ -1,36 +1,41 @@
-import { useRef, useState } from "react";
-import { startGame } from "./game";
+// App layer (menus, settings, future integrations)
 
-function App() {
-  const canvasRef = useRef(null);
-  const [jogando, setJogando] = useState(false);
+export const AppState = {
+  initialized: false,
+  user: null,
+  settings: {
+    sensitivity: 0.0025,
+    volume: 1.0
+  }
+};
 
-  const iniciar = () => {
-    setJogando(true);
+export function initApp() {
+  if (AppState.initialized) return;
 
-    setTimeout(() => {
-      const canvas = canvasRef.current;
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      startGame(canvas);
-    }, 100);
-  };
+  AppState.initialized = true;
 
-  return (
-    <>
-      {!jogando && (
-        <div id="menu">
-          <h1>🔥 BATTLE SHOOTER 🔫</h1>
-          <button onClick={iniciar}>Jogar</button>
-        </div>
-      )}
+  console.log("App initialized successfully");
 
-      <canvas
-        ref={canvasRef}
-        style={{ display: jogando ? "block" : "none" }}
-      />
-    </>
-  );
+  setupBasicUI();
 }
 
-export default App;
+function setupBasicUI() {
+  const ui = document.getElementById("ui");
+
+  if (!ui) return;
+
+  const info = document.createElement("div");
+  info.style.marginTop = "10px";
+  info.style.opacity = "0.7";
+  info.style.fontSize = "12px";
+  info.innerText = "FPS Engine Active";
+
+  ui.appendChild(info);
+}
+
+export function updateSettings(newSettings) {
+  AppState.settings = {
+    ...AppState.settings,
+    ...newSettings
+  };
+}
