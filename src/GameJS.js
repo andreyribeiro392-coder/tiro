@@ -1,230 +1,267 @@
-// GameJS.js - FPS Arcade (Canvas 2D) FIXED
+// GameJS.js - FPS Arcade PRO (Canvas 2D)
 
 (() => {
-  function init() {
-    let canvas =
-      document.getElementById("game") ||
-      document.getElementById("canvas") ||
-      document.querySelector("canvas");
+  let canvas = document.getElementById("game") ||
+               document.getElementById("canvas") ||
+               document.querySelector("canvas");
 
-    // Se não existir canvas, cria um (evita tela branca)
-    if (!canvas) {
-      canvas = document.createElement("canvas");
-      document.body.appendChild(canvas);
-    }
+  if (!canvas) {
+    canvas = document.createElement("canvas");
+    document.body.appendChild(canvas);
+  }
 
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+  const ctx = canvas.getContext("2d");
 
-    function resize() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener("resize", resize);
 
-    resize();
-    window.addEventListener("resize", resize);
+  const W = () => canvas.width;
+  const H = () => canvas.height;
 
-    const W = () => canvas.width;
-    const H = () => canvas.height;
+  const keys = {};
+  let mouseDX = 0;
+  let mouseDY = 0;
 
-    const keys = {};
-    let mouseX = W() / 2;
-    let mouseY = H() / 2;
+  let sensitivity = 0.0025;
 
-    const player = {
-      x: 0,
-      y: 0,
-      angle: 0,
-      hp: 100,
-      score: 0,
-      speed: 2.5,
-    };
+  const player = {
+    x: 0,
+    y: 0,
+    angle: 0,
+    hp: 100,
+    score: 0,
+    speed: 2.6,
+    cooldown: 0
+  };
 
-    const bullets = [];
-    const enemies = [];
+  const bullets = [];
+  const enemies = [];
 
-    const WORLD_SIZE = 2000;
+  const WORLD = 2200;
 
-    function rand(min, max) {
-      return Math.random() * (max - min) + min;
-    }
+  function rand(a, b) {
+    return Math.random() * (b - a) + a;
+  }
 
-    function spawnEnemy() {
-      enemies.push({
-        x: rand(-WORLD_SIZE, WORLD_SIZE),
-        y: rand(-WORLD_SIZE, WORLD_SIZE),
-        hp: 30,
-        speed: rand(0.5, 1.2),
-      });
-    }
-
-    for (let i = 0; i < 12; i++) spawnEnemy();
-
-    window.addEventListener("keydown", (e) => (keys[e.key.toLowerCase()] = true));
-    window.addEventListener("keyup", (e) => (keys[e.key.toLowerCase()] = false));
-
-    window.addEventListener("mousemove", (e) => {
-      mouseX = e.clientX;
-      mouseY = e.clientY;
-      player.angle = Math.atan2(mouseY - H() / 2, mouseX - W() / 2);
+  function spawnEnemy() {
+    enemies.push({
+      x: rand(-WORLD, WORLD),
+      y: rand(-WORLD, WORLD),
+      hp: 40,
+      speed: rand(0.6, 1.4)
     });
+  }
 
-    window.addEventListener("mousedown", () => {
-      shoot();
-    });
+  for (let i = 0; i < 14; i++) spawnEnemy();
 
-    function shoot() {
-      bullets.push({
-        x: player.x,
-        y: player.y,
-        dx: Math.cos(player.angle) * 8,
-        dy: Math.sin(player.angle) * 8,
-        life: 60,
-      });
+  // INPUT
+  window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+  // POINTER LOCK (FPS FEEL)
+  canvas.addEventListener("click", () => {
+    canvas.requestPointerLock?.();
+    shoot();
+  });
+
+  document.addEventListener("mousemove", (e) => {
+    if (document.pointerLockElement === canvas) {
+      mouseDX = e.movementX || 0;
+      mouseDY = e.movementY || 0;
+
+      player.angle += mouseDX * sensitivity;
     }
+  });
 
-    function updatePlayer() {
-      let vx = 0;
-      let vy = 0;
+  function shoot() {
+    if (player.cooldown > 0) return;
+    player.cooldown = 10;
 
-      if (keys["w"]) {
-        vx += Math.cos(player.angle) * player.speed;
-        vy += Math.sin(player.angle) * player.speed;
-      }
-      if (keys["s"]) {
-        vx -= Math.cos(player.angle) * player.speed;
-        vy -= Math.sin(player.angle) * player.speed;
-      }
-      if (keys["a"]) {
-        vx += Math.cos(player.angle - Math.PI / 2) * player.speed;
-        vy += Math.sin(player.angle - Math.PI / 2) * player.speed;
-      }
-      if (keys["d"]) {
-        vx += Math.cos(player.angle + Math.PI / 2) * player.speed;
-        vy += Math.sin(player.angle + Math.PI / 2) * player.speed;
-      }
+    // hitscan (raycast simplificado)
+    const range = 900;
+    const cx = Math.cos(player.angle);
+    const cy = Math.sin(player.angle);
 
-      player.x += vx;
-      player.y += vy;
-    }
+    let hitEnemy = null;
+    let bestDist = 999999;
 
-    function updateBullets() {
-      for (let i = bullets.length - 1; i >= 0; i--) {
-        const b = bullets[i];
-        b.x += b.dx;
-        b.y += b.dy;
-        b.life--;
+    for (const e of enemies) {
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
 
-        if (b.life <= 0) bullets.splice(i, 1);
-      }
-    }
+      const dist = Math.hypot(dx, dy);
+      if (dist > range) continue;
 
-    function updateEnemies() {
-      for (let i = enemies.length - 1; i >= 0; i--) {
-        const e = enemies[i];
+      const dir = (dx * cx + dy * cy) / dist;
 
-        const dx = player.x - e.x;
-        const dy = player.y - e.y;
-        const dist = Math.hypot(dx, dy) || 1;
-
-        e.x += (dx / dist) * e.speed;
-        e.y += (dy / dist) * e.speed;
-
-        if (dist < 30) player.hp -= 0.3;
-
-        for (let j = bullets.length - 1; j >= 0; j--) {
-          const b = bullets[j];
-          const bd = Math.hypot(b.x - e.x, b.y - e.y);
-
-          if (bd < 20) {
-            e.hp -= 15;
-            bullets.splice(j, 1);
-
-            if (e.hp <= 0) {
-              enemies.splice(i, 1);
-              player.score += 10;
-              spawnEnemy();
-            }
-            break;
-          }
+      if (dir > 0.98) {
+        if (dist < bestDist) {
+          bestDist = dist;
+          hitEnemy = e;
         }
       }
     }
 
-    function draw() {
-      ctx.clearRect(0, 0, W(), H());
+    if (hitEnemy) {
+      hitEnemy.hp -= 25;
+      player.score += 5;
 
-      ctx.fillStyle = "#0b0f14";
-      ctx.fillRect(0, 0, W(), H());
+      if (hitEnemy.hp <= 0) {
+        enemies.splice(enemies.indexOf(hitEnemy), 1);
+        spawnEnemy();
+        player.score += 10;
+      }
+    }
+  }
 
-      ctx.save();
-      ctx.translate(W() / 2 - player.x, H() / 2 - player.y);
+  function updatePlayer() {
+    let vx = 0, vy = 0;
 
-      // grid
-      ctx.strokeStyle = "#111";
+    const cos = Math.cos(player.angle);
+    const sin = Math.sin(player.angle);
 
-      for (let i = -WORLD_SIZE; i < WORLD_SIZE; i += 120) {
-        ctx.beginPath();
-        ctx.moveTo(i, -WORLD_SIZE);
-        ctx.lineTo(i, WORLD_SIZE);
-        ctx.stroke();
+    if (keys["w"]) {
+      vx += cos * player.speed;
+      vy += sin * player.speed;
+    }
+    if (keys["s"]) {
+      vx -= cos * player.speed;
+      vy -= sin * player.speed;
+    }
+    if (keys["a"]) {
+      vx += Math.cos(player.angle - Math.PI / 2) * player.speed;
+      vy += Math.sin(player.angle - Math.PI / 2) * player.speed;
+    }
+    if (keys["d"]) {
+      vx += Math.cos(player.angle + Math.PI / 2) * player.speed;
+      vy += Math.sin(player.angle + Math.PI / 2) * player.speed;
+    }
 
-        ctx.beginPath();
-        ctx.moveTo(-WORLD_SIZE, i);
-        ctx.lineTo(WORLD_SIZE, i);
-        ctx.stroke();
+    player.x += vx;
+    player.y += vy;
+
+    player.cooldown = Math.max(0, player.cooldown - 1);
+
+    // limites do mapa
+    player.x = Math.max(-WORLD, Math.min(WORLD, player.x));
+    player.y = Math.max(-WORLD, Math.min(WORLD, player.y));
+  }
+
+  function updateEnemies() {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const dist = Math.hypot(dx, dy) || 1;
+
+      e.x += (dx / dist) * e.speed;
+      e.y += (dy / dist) * e.speed;
+
+      if (dist < 25) {
+        player.hp -= 0.4;
       }
 
-      // enemies
-      ctx.fillStyle = "red";
-      enemies.forEach((e) => {
-        ctx.fillRect(e.x - 10, e.y - 10, 20, 20);
-      });
+      if (e.hp <= 0) {
+        enemies.splice(i, 1);
+        spawnEnemy();
+      }
+    }
+  }
 
-      // bullets
-      ctx.fillStyle = "yellow";
-      bullets.forEach((b) => {
-        ctx.fillRect(b.x - 3, b.y - 3, 6, 6);
-      });
+  function draw() {
+    ctx.clearRect(0, 0, W(), H());
 
-      // player
-      ctx.fillStyle = "cyan";
+    // background
+    ctx.fillStyle = "#070a10";
+    ctx.fillRect(0, 0, W(), H());
+
+    ctx.save();
+    ctx.translate(W() / 2 - player.x, H() / 2 - player.y);
+
+    // grid
+    ctx.strokeStyle = "#111";
+    for (let i = -WORLD; i < WORLD; i += 120) {
       ctx.beginPath();
-      ctx.arc(player.x, player.y, 12, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(i, -WORLD);
+      ctx.lineTo(i, WORLD);
+      ctx.stroke();
 
-      ctx.restore();
-
-      // HUD
-      ctx.fillStyle = "white";
-      ctx.font = "16px Arial";
-      ctx.fillText("HP: " + Math.max(0, Math.floor(player.hp)), 20, 30);
-      ctx.fillText("Score: " + player.score, 20, 55);
-
-      // crosshair
-      ctx.strokeStyle = "white";
       ctx.beginPath();
-      ctx.moveTo(W() / 2 - 10, H() / 2);
-      ctx.lineTo(W() / 2 + 10, H() / 2);
-      ctx.moveTo(W() / 2, H() / 2 - 10);
-      ctx.lineTo(W() / 2, H() / 2 + 10);
+      ctx.moveTo(-WORLD, i);
+      ctx.lineTo(WORLD, i);
       ctx.stroke();
     }
 
-    function loop() {
-      updatePlayer();
-      updateBullets();
-      updateEnemies();
-      draw();
-      requestAnimationFrame(loop);
+    // enemies (fake depth scaling)
+    for (const e of enemies) {
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+      const d = Math.hypot(dx, dy);
+
+      const scale = Math.max(0.4, 1 - d / 2000);
+
+      ctx.fillStyle = "red";
+      ctx.fillRect(
+        e.x - 10 * scale,
+        e.y - 10 * scale,
+        20 * scale,
+        20 * scale
+      );
     }
 
-    loop();
+    // player
+    ctx.fillStyle = "cyan";
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // direction line
+    ctx.strokeStyle = "cyan";
+    ctx.beginPath();
+    ctx.moveTo(player.x, player.y);
+    ctx.lineTo(
+      player.x + Math.cos(player.angle) * 20,
+      player.y + Math.sin(player.angle) * 20
+    );
+    ctx.stroke();
+
+    ctx.restore();
+
+    // HUD
+    ctx.fillStyle = "white";
+    ctx.font = "16px Arial";
+    ctx.fillText("HP: " + Math.max(0, Math.floor(player.hp)), 20, 30);
+    ctx.fillText("Score: " + player.score, 20, 55);
+
+    // crosshair
+    ctx.strokeStyle = "white";
+    ctx.beginPath();
+    ctx.moveTo(W() / 2 - 10, H() / 2);
+    ctx.lineTo(W() / 2 + 10, H() / 2);
+    ctx.moveTo(W() / 2, H() / 2 - 10);
+    ctx.lineTo(W() / 2, H() / 2 + 10);
+    ctx.stroke();
+
+    // hit marker style feedback (simple)
+    if (player.cooldown > 7) {
+      ctx.strokeStyle = "yellow";
+      ctx.beginPath();
+      ctx.arc(W() / 2, H() / 2, 18, 0, Math.PI * 2);
+      ctx.stroke();
+    }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
+  function loop() {
+    updatePlayer();
+    updateEnemies();
+    draw();
+    requestAnimationFrame(loop);
   }
+
+  loop();
 })();
