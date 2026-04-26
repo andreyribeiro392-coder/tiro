@@ -1,32 +1,38 @@
 window.addEventListener("DOMContentLoaded", () => {
   const app = document.getElementById("app");
 
-  // botão start
-  const button = document.createElement("button");
-  button.innerText = "START FPS";
-  app.appendChild(button);
-
-  // canvas
   const canvas = document.createElement("canvas");
   canvas.width = 900;
   canvas.height = 500;
-  canvas.style.display = "none";
-  canvas.style.background = "#111";
+  canvas.style.background = "#0a0a0a";
   app.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
 
-  // player (FPS simulado)
+  // player FPS (posição + direção do mouse)
   const player = {
     x: 450,
-    y: 450,
+    y: 400,
+    angle: 0,
     speed: 4,
-    hp: 100,
   };
 
   const keys = {};
-  document.addEventListener("keydown", (e) => (keys[e.key] = true));
-  document.addEventListener("keyup", (e) => (keys[e.key] = false));
+  let mouse = { x: 0, y: 0, click: false };
+
+  document.addEventListener("keydown", e => keys[e.key] = true);
+  document.addEventListener("keyup", e => keys[e.key] = false);
+
+  canvas.addEventListener("mousemove", (e) => {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
+
+    player.angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  });
+
+  canvas.addEventListener("mousedown", () => mouse.click = true);
+  canvas.addEventListener("mouseup", () => mouse.click = false);
 
   // inimigos
   const enemies = [];
@@ -34,104 +40,106 @@ window.addEventListener("DOMContentLoaded", () => {
   function spawnEnemy() {
     enemies.push({
       x: Math.random() * canvas.width,
-      y: -20,
-      size: 25,
-      speed: 1.5 + Math.random() * 2,
+      y: Math.random() * canvas.height,
+      hp: 1,
     });
   }
 
-  setInterval(spawnEnemy, 1000);
-
-  let score = 0;
-  let shootingCooldown = 0;
+  setInterval(spawnEnemy, 1500);
 
   function shoot() {
     for (let i = enemies.length - 1; i >= 0; i--) {
       const e = enemies[i];
 
-      // "raycast simples"
       const dx = e.x - player.x;
       const dy = e.y - player.y;
 
-      if (Math.abs(dx) < 40 && dy < 200) {
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if (dist < 120) {
         enemies.splice(i, 1);
-        score += 10;
         break;
       }
     }
   }
 
   function update() {
-    // movimento
-    if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
-    if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
-    if (keys["ArrowUp"] || keys["w"]) player.y -= player.speed;
-    if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
-
-    // limites
-    player.x = Math.max(0, Math.min(canvas.width, player.x));
-    player.y = Math.max(0, Math.min(canvas.height, player.y));
-
-    // tiro
-    if (keys[" "] && shootingCooldown <= 0) {
-      shoot();
-      shootingCooldown = 15;
+    // movimento FPS
+    if (keys["w"]) {
+      player.x += Math.cos(player.angle) * player.speed;
+      player.y += Math.sin(player.angle) * player.speed;
+    }
+    if (keys["s"]) {
+      player.x -= Math.cos(player.angle) * player.speed;
+      player.y -= Math.sin(player.angle) * player.speed;
+    }
+    if (keys["a"]) {
+      player.x += Math.cos(player.angle - Math.PI / 2) * player.speed;
+      player.y += Math.sin(player.angle - Math.PI / 2) * player.speed;
+    }
+    if (keys["d"]) {
+      player.x += Math.cos(player.angle + Math.PI / 2) * player.speed;
+      player.y += Math.sin(player.angle + Math.PI / 2) * player.speed;
     }
 
-    if (shootingCooldown > 0) shootingCooldown--;
-
-    // inimigos descendo
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
-      e.y += e.speed;
-
-      // colisão com player
-      const dx = e.x - player.x;
-      const dy = e.y - player.y;
-
-      if (Math.sqrt(dx * dx + dy * dy) < 30) {
-        player.hp -= 10;
-        enemies.splice(i, 1);
-      }
-
-      if (e.y > canvas.height) {
-        enemies.splice(i, 1);
-      }
+    // tiro
+    if (mouse.click) {
+      shoot();
+      mouse.click = false;
     }
   }
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // chão / céu (FPS vibe)
-    ctx.fillStyle = "#222";
-    ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+    // chão estilo mapa
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    ctx.fillStyle = "#333";
-    ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
+    // grid mapa
+    ctx.strokeStyle = "#222";
+    for (let i = 0; i < canvas.width; i += 40) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(i, canvas.height);
+      ctx.stroke();
+    }
 
-    // mira
-    ctx.strokeStyle = "white";
-    ctx.beginPath();
-    ctx.moveTo(canvas.width / 2 - 10, canvas.height / 2);
-    ctx.lineTo(canvas.width / 2 + 10, canvas.height / 2);
-    ctx.moveTo(canvas.width / 2, canvas.height / 2 - 10);
-    ctx.lineTo(canvas.width / 2, canvas.height / 2 + 10);
-    ctx.stroke();
+    for (let i = 0; i < canvas.height; i += 40) {
+      ctx.beginPath();
+      ctx.moveTo(0, i);
+      ctx.lineTo(canvas.width, i);
+      ctx.stroke();
+    }
 
-    // inimigos (simulando distância)
-    enemies.forEach((e) => {
-      const size = e.size + (e.y / canvas.height) * 50;
+    // player (FPS arma simples)
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+
+    ctx.fillStyle = "lime";
+    ctx.fillRect(0, -5, 30, 10);
+
+    ctx.restore();
+
+    // inimigos
+    enemies.forEach(e => {
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const size = Math.max(5, 50 - dist * 0.1);
 
       ctx.fillStyle = "red";
       ctx.fillRect(e.x, e.y, size, size);
     });
 
-    // HUD
-    ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.fillText("HP: " + player.hp, 10, 20);
-    ctx.fillText("Score: " + score, 10, 40);
+    // mira central
+    ctx.strokeStyle = "white";
+    ctx.beginPath();
+    ctx.arc(mouse.x, mouse.y, 5, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
   function loop() {
@@ -140,9 +148,5 @@ window.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(loop);
   }
 
-  button.onclick = () => {
-    button.style.display = "none";
-    canvas.style.display = "block";
-    loop();
-  };
+  loop();
 });
