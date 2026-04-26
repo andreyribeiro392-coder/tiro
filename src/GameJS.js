@@ -1,7 +1,6 @@
 window.addEventListener("DOMContentLoaded", () => {
   const app = document.getElementById("app");
 
-  // botão
   const button = document.createElement("button");
   button.innerText = "START";
   button.style.padding = "10px 20px";
@@ -12,7 +11,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
   app.appendChild(button);
 
-  // canvas
   const canvas = document.createElement("canvas");
   canvas.width = 900;
   canvas.height = 500;
@@ -24,7 +22,6 @@ window.addEventListener("DOMContentLoaded", () => {
 
   const ctx = canvas.getContext("2d");
 
-  // player
   const player = {
     x: 450,
     y: 430,
@@ -87,7 +84,6 @@ window.addEventListener("DOMContentLoaded", () => {
     enemies.forEach((e, ei) => {
       e.y += e.speed;
 
-      // colisão player
       if (
         e.x < player.x + player.w &&
         e.x + e.w > player.x &&
@@ -98,7 +94,6 @@ window.addEventListener("DOMContentLoaded", () => {
         enemies.length = 0;
       }
 
-      // colisão bala
       bullets.forEach((b, bi) => {
         if (
           b.x < e.x + e.w &&
@@ -117,11 +112,9 @@ window.addEventListener("DOMContentLoaded", () => {
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // fundo
     ctx.fillStyle = "#0d0d0d";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // grid
     ctx.strokeStyle = "#1f1f1f";
     for (let i = 0; i < canvas.width; i += 50) {
       ctx.beginPath();
@@ -137,19 +130,15 @@ window.addEventListener("DOMContentLoaded", () => {
       ctx.stroke();
     }
 
-    // player
     ctx.fillStyle = "lime";
     ctx.fillRect(player.x, player.y, player.w, player.h);
 
-    // bullets
     ctx.fillStyle = "yellow";
     bullets.forEach((b) => ctx.fillRect(b.x, b.y, 5, 10));
 
-    // enemies
     ctx.fillStyle = "red";
     enemies.forEach((e) => ctx.fillRect(e.x, e.y, e.w, e.h));
 
-    // score
     ctx.fillStyle = "white";
     ctx.font = "18px Arial";
     ctx.fillText("Score: " + score, 10, 20);
