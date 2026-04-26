@@ -1,14 +1,6 @@
-// GameJS.js - FPS Arcade PRO (Canvas 2D)
-
 (() => {
-  let canvas = document.getElementById("game") ||
-               document.getElementById("canvas") ||
-               document.querySelector("canvas");
-
-  if (!canvas) {
-    canvas = document.createElement("canvas");
-    document.body.appendChild(canvas);
-  }
+  const canvas = document.querySelector("canvas") || document.createElement("canvas");
+  if (!canvas.parentNode) document.body.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
 
@@ -19,247 +11,108 @@
   resize();
   window.addEventListener("resize", resize);
 
-  const W = () => canvas.width;
-  const H = () => canvas.height;
-
   const keys = {};
-  let mouseDX = 0;
-  let mouseDY = 0;
+  let angle = 0;
 
-  let sensitivity = 0.0025;
+  const player = { x: 3, y: 3 };
 
-  const player = {
-    x: 0,
-    y: 0,
-    angle: 0,
-    hp: 100,
-    score: 0,
-    speed: 2.6,
-    cooldown: 0
-  };
+  const map = [
+    "111111111111",
+    "100000000001",
+    "101111011101",
+    "101000000101",
+    "101011110101",
+    "101000000101",
+    "101111011101",
+    "100000000001",
+    "111111111111",
+  ];
 
-  const bullets = [];
-  const enemies = [];
+  const FOV = Math.PI / 3;
+  const depth = 16;
 
-  const WORLD = 2200;
-
-  function rand(a, b) {
-    return Math.random() * (b - a) + a;
-  }
-
-  function spawnEnemy() {
-    enemies.push({
-      x: rand(-WORLD, WORLD),
-      y: rand(-WORLD, WORLD),
-      hp: 40,
-      speed: rand(0.6, 1.4)
-    });
-  }
-
-  for (let i = 0; i < 14; i++) spawnEnemy();
-
-  // INPUT
   window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
   window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-  // POINTER LOCK (FPS FEEL)
-  canvas.addEventListener("click", () => {
-    canvas.requestPointerLock?.();
-    shoot();
-  });
-
-  document.addEventListener("mousemove", (e) => {
+  window.addEventListener("mousemove", e => {
     if (document.pointerLockElement === canvas) {
-      mouseDX = e.movementX || 0;
-      mouseDY = e.movementY || 0;
-
-      player.angle += mouseDX * sensitivity;
+      angle += e.movementX * 0.002;
     }
   });
 
-  function shoot() {
-    if (player.cooldown > 0) return;
-    player.cooldown = 10;
+  canvas.addEventListener("click", () => canvas.requestPointerLock?.());
 
-    // hitscan (raycast simplificado)
-    const range = 900;
-    const cx = Math.cos(player.angle);
-    const cy = Math.sin(player.angle);
-
-    let hitEnemy = null;
-    let bestDist = 999999;
-
-    for (const e of enemies) {
-      const dx = e.x - player.x;
-      const dy = e.y - player.y;
-
-      const dist = Math.hypot(dx, dy);
-      if (dist > range) continue;
-
-      const dir = (dx * cx + dy * cy) / dist;
-
-      if (dir > 0.98) {
-        if (dist < bestDist) {
-          bestDist = dist;
-          hitEnemy = e;
-        }
-      }
-    }
-
-    if (hitEnemy) {
-      hitEnemy.hp -= 25;
-      player.score += 5;
-
-      if (hitEnemy.hp <= 0) {
-        enemies.splice(enemies.indexOf(hitEnemy), 1);
-        spawnEnemy();
-        player.score += 10;
-      }
-    }
+  function isWall(x, y) {
+    return map[Math.floor(y)]?.[Math.floor(x)] === "1";
   }
 
-  function updatePlayer() {
-    let vx = 0, vy = 0;
+  function update() {
+    const speed = 0.05;
 
-    const cos = Math.cos(player.angle);
-    const sin = Math.sin(player.angle);
+    let dx = 0;
+    let dy = 0;
 
     if (keys["w"]) {
-      vx += cos * player.speed;
-      vy += sin * player.speed;
+      dx += Math.cos(angle) * speed;
+      dy += Math.sin(angle) * speed;
     }
     if (keys["s"]) {
-      vx -= cos * player.speed;
-      vy -= sin * player.speed;
+      dx -= Math.cos(angle) * speed;
+      dy -= Math.sin(angle) * speed;
     }
     if (keys["a"]) {
-      vx += Math.cos(player.angle - Math.PI / 2) * player.speed;
-      vy += Math.sin(player.angle - Math.PI / 2) * player.speed;
+      dx += Math.cos(angle - Math.PI / 2) * speed;
+      dy += Math.sin(angle - Math.PI / 2) * speed;
     }
     if (keys["d"]) {
-      vx += Math.cos(player.angle + Math.PI / 2) * player.speed;
-      vy += Math.sin(player.angle + Math.PI / 2) * player.speed;
+      dx += Math.cos(angle + Math.PI / 2) * speed;
+      dy += Math.sin(angle + Math.PI / 2) * speed;
     }
 
-    player.x += vx;
-    player.y += vy;
-
-    player.cooldown = Math.max(0, player.cooldown - 1);
-
-    // limites do mapa
-    player.x = Math.max(-WORLD, Math.min(WORLD, player.x));
-    player.y = Math.max(-WORLD, Math.min(WORLD, player.y));
+    if (!isWall(player.x + dx, player.y)) player.x += dx;
+    if (!isWall(player.x, player.y + dy)) player.y += dy;
   }
 
-  function updateEnemies() {
-    for (let i = enemies.length - 1; i >= 0; i--) {
-      const e = enemies[i];
+  function castRay(rayAngle) {
+    let dist = 0;
 
-      const dx = player.x - e.x;
-      const dy = player.y - e.y;
-      const dist = Math.hypot(dx, dy) || 1;
+    const step = 0.02;
 
-      e.x += (dx / dist) * e.speed;
-      e.y += (dy / dist) * e.speed;
+    while (dist < depth) {
+      const testX = player.x + Math.cos(rayAngle) * dist;
+      const testY = player.y + Math.sin(rayAngle) * dist;
 
-      if (dist < 25) {
-        player.hp -= 0.4;
-      }
+      if (isWall(testX, testY)) return dist;
 
-      if (e.hp <= 0) {
-        enemies.splice(i, 1);
-        spawnEnemy();
-      }
+      dist += step;
     }
+
+    return depth;
   }
 
-  function draw() {
-    ctx.clearRect(0, 0, W(), H());
+  function render() {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // background
-    ctx.fillStyle = "#070a10";
-    ctx.fillRect(0, 0, W(), H());
+    for (let x = 0; x < canvas.width; x++) {
+      const rayAngle = (angle - FOV / 2) + (x / canvas.width) * FOV;
+      const dist = castRay(rayAngle);
 
-    ctx.save();
-    ctx.translate(W() / 2 - player.x, H() / 2 - player.y);
+      const lineHeight = (canvas.height / dist);
 
-    // grid
-    ctx.strokeStyle = "#111";
-    for (let i = -WORLD; i < WORLD; i += 120) {
-      ctx.beginPath();
-      ctx.moveTo(i, -WORLD);
-      ctx.lineTo(i, WORLD);
-      ctx.stroke();
+      const shade = 255 - dist * 20;
 
-      ctx.beginPath();
-      ctx.moveTo(-WORLD, i);
-      ctx.lineTo(WORLD, i);
-      ctx.stroke();
+      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+      ctx.fillRect(x, canvas.height / 2 - lineHeight / 2, 1, lineHeight);
     }
 
-    // enemies (fake depth scaling)
-    for (const e of enemies) {
-      const dx = e.x - player.x;
-      const dy = e.y - player.y;
-      const d = Math.hypot(dx, dy);
-
-      const scale = Math.max(0.4, 1 - d / 2000);
-
-      ctx.fillStyle = "red";
-      ctx.fillRect(
-        e.x - 10 * scale,
-        e.y - 10 * scale,
-        20 * scale,
-        20 * scale
-      );
-    }
-
-    // player
-    ctx.fillStyle = "cyan";
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, 12, 0, Math.PI * 2);
-    ctx.fill();
-
-    // direction line
-    ctx.strokeStyle = "cyan";
-    ctx.beginPath();
-    ctx.moveTo(player.x, player.y);
-    ctx.lineTo(
-      player.x + Math.cos(player.angle) * 20,
-      player.y + Math.sin(player.angle) * 20
-    );
-    ctx.stroke();
-
-    ctx.restore();
-
-    // HUD
     ctx.fillStyle = "white";
-    ctx.font = "16px Arial";
-    ctx.fillText("HP: " + Math.max(0, Math.floor(player.hp)), 20, 30);
-    ctx.fillText("Score: " + player.score, 20, 55);
-
-    // crosshair
-    ctx.strokeStyle = "white";
-    ctx.beginPath();
-    ctx.moveTo(W() / 2 - 10, H() / 2);
-    ctx.lineTo(W() / 2 + 10, H() / 2);
-    ctx.moveTo(W() / 2, H() / 2 - 10);
-    ctx.lineTo(W() / 2, H() / 2 + 10);
-    ctx.stroke();
-
-    // hit marker style feedback (simple)
-    if (player.cooldown > 7) {
-      ctx.strokeStyle = "yellow";
-      ctx.beginPath();
-      ctx.arc(W() / 2, H() / 2, 18, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    ctx.fillText("FPS DOOM MODE OK", 20, 20);
   }
 
   function loop() {
-    updatePlayer();
-    updateEnemies();
-    draw();
+    update();
+    render();
     requestAnimationFrame(loop);
   }
 
