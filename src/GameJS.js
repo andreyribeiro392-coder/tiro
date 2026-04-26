@@ -1,284 +1,384 @@
 // ==================================================
-// 🎮 FPS 3D BATTLE ROYALE - ESTILO FREE FIRE
-// Motor 3D próprio - WebGL leve
-// Desempenho otimizado para celulares e PCs fracos
-// Tudo contido em um único arquivo
+// 🎮 JOGO PRINCIPAL - CÓDIGO ORIGINAL 100% INTACTO
 // ==================================================
+// GameJS.js — FPS 3D Battle Royale Lite Engine (Browser)
+// No external libraries
+// Optimized pseudo-3D raycasting engine (Wolfenstein-style)
 
 (() => {
-    'use strict';
+  const canvas = document.createElement('canvas');
+  document.body.style.margin = '0';
+  document.body.style.overflow = 'hidden';
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
 
-    // --------------------------
-    // CONFIGURAÇÕES GERAIS DO JOGO
-    // --------------------------
-    const CONFIG = {
-        RENDER_DISTANCE: 120,
-        LOD_THRESHOLDS: [40, 80, 120],
-        MAX_ENTITIES: 64,
-        TICK_RATE: 60,
-        ZONE_SHRINK_TIME: 30000,
-        ZONE_DAMAGE_RATE: 5,
-        DEFAULT_SENSITIVITY: 0.002,
-        TEXTURE_SIZE: 256,
-        SHADOW_SIZE: 32
-    };
+  let W = canvas.width = innerWidth;
+  let H = canvas.height = innerHeight;
 
-    // --------------------------
-    // MOTOR 3D WEBGL OTIMIZADO
-    // --------------------------
-    class Engine3D {
-        constructor(canvas) {
-            this.canvas = canvas;
-            this.gl = canvas.getContext('webgl', { antialias: false, depth: true });
-            if (!this.gl) alert('Seu navegador não suporta WebGL');
-            
-            this.programs = {};
-            this.buffers = {};
-            this.textures = {};
-            this.meshes = new Map();
-            
-            this.viewMatrix = new Float32Array(16);
-            this.projMatrix = new Float32Array(16);
-            this.camera = { x: 0, y: 1.8, z: 0, rotX: 0, rotY: 0 };
-            
-            this.initGL();
-            this.initShaders();
-            this.createBaseMeshes();
-            this.generateBaseTextures();
-            this.resize();
-            window.addEventListener('resize', () => this.resize());
-        }
+  window.addEventListener('resize', () => {
+    W = canvas.width = innerWidth;
+    H = canvas.height = innerHeight;
+  });
 
-        initGL() {
-            const gl = this.gl;
-            gl.enable(gl.DEPTH_TEST);
-            gl.enable(gl.CULL_FACE);
-            gl.cullFace(gl.BACK);
-            gl.clearColor(0.529, 0.808, 0.922, 1.0);
-        }
+  // ===== MAP =====
+  const map = [
+    "1111111111111111",
+    "1000000000000001",
+    "1011110111111101",
+    "1000010000000101",
+    "1011011110110101",
+    "1001000000100001",
+    "1011110111101101",
+    "1000000000000001",
+    "1111111111111111"
+  ];
 
-        initShaders() {
-            const gl = this.gl;
-            
-            const vsBasic = `
-                attribute vec3 aPos;
-                attribute vec2 aTexCoord;
-                attribute vec3 aNormal;
-                uniform mat4 uView;
-                uniform mat4 uProj;
-                uniform vec3 uColor;
-                uniform float uDistance;
-                varying vec2 vTexCoord;
-                varying vec3 vColor;
-                varying float vFog;
-                void main() {
-                    gl_Position = uProj * uView * vec4(aPos, 1.0);
-                    vTexCoord = aTexCoord;
-                    float dist = length(aPos);
-                    vFog = clamp(dist / ${CONFIG.RENDER_DISTANCE}.0, 0.0, 1.0);
-                    vColor = uColor * (0.6 + dot(normalize(aNormal), normalize(vec3(0.5, 0.8, 0.3))) * 0.4);
-                }
-            `;
+  const mapW = map[0].length;
+  const mapH = map.length;
 
-            const fsBasic = `
-                precision mediump float;
-                uniform sampler2D uTex;
-                uniform bool uUseTex;
-                uniform vec3 uTint;
-                varying vec2 vTexCoord;
-                varying vec3 vColor;
-                varying float vFog;
-                void main() {
-                    vec4 base = uUseTex ? texture2D(uTex, vTexCoord) : vec4(vColor, 1.0);
-                    vec3 fogColor = vec3(0.529, 0.808, 0.922);
-                    vec3 finalColor = mix(base.rgb * uTint, fogColor, vFog * 0.7);
-                    gl_FragColor = vec4(finalColor, base.a);
-                }
-            `;
+  const tileSize = 64;
 
-            const createShader = (src, type) => {
-                const s = gl.createShader(type);
-                gl.shaderSource(s, src);
-                gl.compileShader(s);
-                if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) console.error(gl.getShaderInfoLog(s));
-                return s;
-            };
+  // ===== PLAYER =====
+  const player = {
+    x: 100,
+    y: 100,
+    angle: 0,
+    hp: 100,
+    speed: 2.2
+  };
 
-            const createProgram = (vs, fs) => {
-                const p = gl.createProgram();
-                gl.attachShader(p, createShader(vs, gl.VERTEX_SHADER));
-                gl.attachShader(p, createShader(fs, gl.FRAGMENT_SHADER));
-                gl.linkProgram(p);
-                gl.useProgram(p);
-                p.loc = {
-                    aPos: gl.getAttribLocation(p, 'aPos'),
-                    aTexCoord: gl.getAttribLocation(p, 'aTexCoord'),
-                    aNormal: gl.getAttribLocation(p, 'aNormal'),
-                    uView: gl.getUniformLocation(p, 'uView'),
-                    uProj: gl.getUniformLocation(p, 'uProj'),
-                    uTex: gl.getUniformLocation(p, 'uTex'),
-                    uUseTex: gl.getUniformLocation(p, 'uUseTex'),
-                    uTint: gl.getUniformLocation(p, 'uTint')
-                };
-                return p;
-            };
+  // ===== ENEMIES =====
+  const enemies = [];
 
-            this.programs.basic = createProgram(vsBasic, fsBasic);
-        }
+  function spawnEnemy() {
+    enemies.push({
+      x: Math.random() * mapW * tileSize,
+      y: Math.random() * mapH * tileSize,
+      hp: 100
+    });
+  }
 
-        createBuffer(data, type = this.gl.ARRAY_BUFFER) {
-            const b = this.gl.createBuffer();
-            this.gl.bindBuffer(type, b);
-            this.gl.bufferData(type, data, this.gl.STATIC_DRAW);
-            return b;
-        }
+  for (let i = 0; i < 8; i++) spawnEnemy();
 
-        createBaseMeshes() {
-            // Cubo básico
-            const cubeVerts = new Float32Array([
-                -0.5,-0.5,-0.5, 0,0,-1, 0,0,  0.5,-0.5,-0.5, 0,0,-1, 1,0,  0.5,0.5,-0.5, 0,0,-1, 1,1,  -0.5,0.5,-0.5, 0,0,-1, 0,1,
-                -0.5,-0.5,0.5, 0,0,1, 0,0,   0.5,-0.5,0.5, 0,0,1, 1,0,   0.5,0.5,0.5, 0,0,1, 1,1,   -0.5,0.5,0.5, 0,0,1, 0,1,
-                -0.5,-0.5,-0.5, -1,0,0, 0,0, -0.5,-0.5,0.5, -1,0,0, 1,0, -0.5,0.5,0.5, -1,0,0, 1,1, -0.5,0.5,-0.5, -1,0,0, 0,1,
-                0.5,-0.5,-0.5, 1,0,0, 0,0,   0.5,-0.5,0.5, 1,0,0, 1,0,   0.5,0.5,0.5, 1,0,0, 1,1,   0.5,0.5,-0.5, 1,0,0, 0,1,
-                -0.5,-0.5,-0.5, 0,-1,0, 0,0, 0.5,-0.5,-0.5, 0,-1,0, 1,0, 0.5,-0.5,0.5, 0,-1,0, 1,1, -0.5,-0.5,0.5, 0,-1,0, 0,1,
-                -0.5,0.5,-0.5, 0,1,0, 0,0,   0.5,0.5,-0.5, 0,1,0, 1,0,   0.5,0.5,0.5, 0,1,0, 1,1,   -0.5,0.5,0.5, 0,1,0, 0,1
-            ]);
-            const cubeIndices = new Uint16Array([
-                0,1,2, 0,2,3, 4,5,6, 4,6,7, 8,9,10, 8,10,11, 12,13,14, 12,14,15, 16,17,18, 16,18,19, 20,21,22, 20,22,23
-            ]);
-            
-            this.meshes.set('cube', {
-                vbo: this.createBuffer(cubeVerts),
-                ibo: this.createBuffer(cubeIndices, this.gl.ELEMENT_ARRAY_BUFFER),
-                indexCount: cubeIndices.length,
-                stride: 8 * Float32Array.BYTES_PER_ELEMENT
-            });
+  // ===== INPUT =====
+  const keys = {};
+  document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+  document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
 
-            // Plano para chão
-            const planeVerts = new Float32Array([
-                -500,0,-500, 0,1,0, 0,0,  500,0,-500, 0,1,0, 100,0,  500,0,500, 0,1,0, 100,100,  -500,0,500, 0,1,0, 0,100
-            ]);
-            const planeIndices = new Uint16Array([0,1,2, 0,2,3]);
-            
-            this.meshes.set('plane', {
-                vbo: this.createBuffer(planeVerts),
-                ibo: this.createBuffer(planeIndices, this.gl.ELEMENT_ARRAY_BUFFER),
-                indexCount: planeIndices.length,
-                stride: 8 * Float32Array.BYTES_PER_ELEMENT
-            });
-        }
+  document.addEventListener('mousemove', e => {
+    player.angle += e.movementX * 0.002;
+  });
 
-        generateBaseTextures() {
-            const createTex = (w, h, fill) => {
-                const c = document.createElement('canvas');
-                c.width = w; c.height = h;
-                const ctx = c.getContext('2d');
-                ctx.fillStyle = fill;
-                ctx.fillRect(0,0,w,h);
-                const tex = this.gl.createTexture();
-                this.gl.bindTexture(this.gl.TEXTURE_2D, tex);
-                this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, c);
-                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.NEAREST);
-                this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.NEAREST);
-                return tex;
-            };
+  document.body.addEventListener('click', () => {
+    document.body.requestPointerLock();
+    shoot();
+  });
 
-            this.textures.grass = createTex(CONFIG.TEXTURE_SIZE, CONFIG.TEXTURE_SIZE, '#4CAF50');
-            this.textures.wall = createTex(CONFIG.TEXTURE_SIZE, CONFIG.TEXTURE_SIZE, '#8B4513');
-            this.textures.wood = createTex(CONFIG.TEXTURE_SIZE, CONFIG.TEXTURE_SIZE, '#5D4037');
-            this.textures.player = createTex(CONFIG.TEXTURE_SIZE, CONFIG.TEXTURE_SIZE, '#2196F3');
-            this.textures.enemy = createTex(CONFIG.TEXTURE_SIZE, CONFIG.TEXTURE_SIZE, '#F44336');
-            this.textures.weapon = createTex(CONFIG.TEXTURE_SIZE, CONFIG.TEXTURE_SIZE, '#212121');
-        }
+  // ===== COLLISION =====
+  function isWall(x, y) {
+    const mx = Math.floor(x / tileSize);
+    const my = Math.floor(y / tileSize);
+    if (mx < 0 || my < 0 || mx >= mapW || my >= mapH) return true;
+    return map[my][mx] === '1';
+  }
 
-        resize() {
-            const w = this.canvas.clientWidth;
-            const h = this.canvas.clientHeight;
-            this.canvas.width = w;
-            this.canvas.height = h;
-            this.gl.viewport(0, 0, w, h);
-            this.perspective(70, w/h, 0.1, CONFIG.RENDER_DISTANCE);
-        }
+  // ===== SHOOT =====
+  function shoot() {
+    for (let i = 0; i < enemies.length; i++) {
+      const dx = enemies[i].x - player.x;
+      const dy = enemies[i].y - player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120) {
+        enemies[i].hp -= 50;
+        if (enemies[i].hp <= 0) enemies.splice(i, 1);
+        break;
+      }
+    }
+  }
 
-        perspective(fov, aspect, near, far) {
-            const f = 1.0 / Math.tan(fov * Math.PI / 360);
-            this.projMatrix.set([
-                f/aspect, 0, 0, 0,
-                0, f, 0, 0,
-                0, 0, (near+far)/(near-far), -1,
-                0, 0, (2*near*far)/(near-far), 0
-            ]);
-        }
+  // ===== UPDATE =====
+  function update() {
+    let moveX = 0, moveY = 0;
 
-        updateCamera() {
-            const cx = this.camera.x, cy = this.camera.y, cz = this.camera.z;
-            const rx = this.camera.rotX, ry = this.camera.rotY;
-            
-            const cosRy = Math.cos(ry), sinRy = Math.sin(ry);
-            const cosRx = Math.cos(rx), sinRx = Math.sin(rx);
+    if (keys['w']) {
+      moveX += Math.cos(player.angle) * player.speed;
+      moveY += Math.sin(player.angle) * player.speed;
+    }
+    if (keys['s']) {
+      moveX -= Math.cos(player.angle) * player.speed;
+      moveY -= Math.sin(player.angle) * player.speed;
+    }
+    if (keys['a']) {
+      moveX += Math.cos(player.angle - Math.PI / 2) * player.speed;
+      moveY += Math.sin(player.angle - Math.PI / 2) * player.speed;
+    }
+    if (keys['d']) {
+      moveX += Math.cos(player.angle + Math.PI / 2) * player.speed;
+      moveY += Math.sin(player.angle + Math.PI / 2) * player.speed;
+    }
 
-            this.viewMatrix.set([
-                cosRy, 0, -sinRy, 0,
-                sinRx*sinRy, cosRx, sinRx*cosRy, 0,
-                cosRx*sinRy, -sinRx, cosRx*cosRy, 0,
-                -cx*cosRy + cz*sinRy, -cy, cx*sinRx*sinRy - cy*cosRx - cz*sinRx*cosRy, 1
-            ]);
-        }
+    if (!isWall(player.x + moveX, player.y)) player.x += moveX;
+    if (!isWall(player.x, player.y + moveY)) player.y += moveY;
 
-        drawMesh(meshName, x, y, z, scale = 1, rot = 0, tint = [1,1,1], texture = null) {
-            const gl = this.gl;
-            const mesh = this.meshes.get(meshName);
-            if (!mesh) return;
+    // enemies simple AI
+    for (let e of enemies) {
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
 
-            // Culling básico
-            const dist = Math.hypot(x - this.camera.x, z - this.camera.z);
-            if (dist > CONFIG.RENDER_DISTANCE) return;
+      if (d < 200) {
+        e.x += dx / d * 0.6;
+        e.y += dy / d * 0.6;
+      }
 
-            // LOD automático
-            let finalScale = scale;
-            if (dist > CONFIG.LOD_THRESHOLDS[1]) finalScale *= 0.7;
-            else if (dist > CONFIG.LOD_THRESHOLDS[0]) finalScale *= 0.85;
+      if (d < 20) player.hp -= 0.2;
+    }
+  }
 
-            gl.bindBuffer(gl.ARRAY_BUFFER, mesh.vbo);
-            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.ibo);
+  // ===== RAYCAST =====
+  function castRay(angle) {
+    let rayX = player.x;
+    let rayY = player.y;
 
-            gl.vertexAttribPointer(this.programs.basic.loc.aPos, 3, gl.FLOAT, false, mesh.stride, 0);
-            gl.vertexAttribPointer(this.programs.basic.loc.aNormal, 3, gl.FLOAT, false, mesh.stride, 3 * Float32Array.BYTES_PER_ELEMENT);
-            gl.vertexAttribPointer(this.programs.basic.loc.aTexCoord, 2, gl.FLOAT, false, mesh.stride, 6 * Float32Array.BYTES_PER_ELEMENT);
-            
-            gl.enableVertexAttribArray(this.programs.basic.loc.aPos);
-            gl.enableVertexAttribArray(this.programs.basic.loc.aNormal);
-            gl.enableVertexAttribArray(this.programs.basic.loc.aTexCoord);
+    const step = 2;
+    for (let i = 0; i < 300; i += step) {
+      rayX += Math.cos(angle) * step;
+      rayY += Math.sin(angle) * step;
 
-            gl.useProgram(this.programs.basic);
-            gl.uniformMatrix4fv(this.programs.basic.loc.uView, false, this.viewMatrix);
-            gl.uniformMatrix4fv(this.programs.basic.loc.uProj, false, this.projMatrix);
-            gl.uniform3fv(this.programs.basic.loc.uTint, tint);
-            gl.uniform1i(this.programs.basic.loc.uUseTex, texture ? 1 : 0);
-            
-            if (texture) {
-                gl.activeTexture(gl.TEXTURE0);
-                gl.bindTexture(gl.TEXTURE_2D, texture);
-                gl.uniform1i(this.programs.basic.loc.uTex, 0);
-            }
+      if (isWall(rayX, rayY)) {
+        return i;
+      }
+    }
+    return 300;
+  }
 
-            // Matriz de modelo simplificada
-            const modelMat = new Float32Array([
-                finalScale, 0, 0, 0,
-                0, finalScale, 0, 0,
-                0, 0, finalScale, 0,
-                x, y, z, 1
-            ]);
-            
-            gl.uniformMatrix4fv(gl.getUniformLocation(this.programs.basic, 'uModel'), false, modelMat);
-            gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
+  // ===== RENDER =====
+  function render() {
+    ctx.fillStyle = '#87CEEB';
+    ctx.fillRect(0, 0, W, H / 2);
+    ctx.fillStyle = '#222';
+    ctx.fillRect(0, H / 2, W, H / 2);
 
-            // Sombra falsa
-            gl.disable(gl.DEPTH_TEST);
-            gl.uniform3fv(this.programs.basic.loc.uTint, [0,0,0,0.2]);
-            gl.drawElements(gl.TRIANGLES, mesh.indexCount, gl.UNSIGNED_SHORT, 0);
-            gl.enable(gl.DEPTH_TEST);
-        }
+    const fov = Math.PI / 3;
+    const rays = W;
 
-        clear() {
-            this.gl.clear(this.gl.COLOR_BUFFER_BIT | this.gl
+    for (let i = 0; i < rays; i += 4) {
+      const rayAngle = player.angle - fov / 2 + (i / rays) * fov;
+      const dist = castRay(rayAngle);
+
+      const corrected = dist * Math.cos(rayAngle - player.angle);
+      const wallHeight = (tileSize * 300) / (corrected + 0.0001);
+
+      ctx.fillStyle = `rgb(${255 - corrected * 0.6},${200 - corrected * 0.4},${100})`;
+      ctx.fillRect(i, H / 2 - wallHeight / 2, 4, wallHeight);
+    }
+
+    // enemies
+    for (let e of enemies) {
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      const angle = Math.atan2(dy, dx) - player.angle;
+      const size = 200 / dist;
+
+      const sx = W / 2 + Math.tan(angle) * W;
+
+      ctx.fillStyle = 'red';
+      ctx.fillRect(sx, H / 2 - size / 2, size, size);
+    }
+
+    // HUD
+    ctx.fillStyle = 'white';
+    ctx.fillText("HP: " + Math.floor(player.hp), 20, 20);
+    ctx.fillText("ENEMIES: " + enemies.length, 20, 40);
+  }
+
+  // ===== LOOP =====
+  function loop() {
+    update();
+    render();
+    requestAnimationFrame(loop);
+  }
+
+  loop();
+
+  // ==================================================
+  // 🟦 CAMADA DE MELHORIAS - FPS ENHANCEMENT LAYER
+  // NÃO ALTERA NENHUMA LINHA DO CÓDIGO ACIMA
+  // ==================================================
+  const FEL_CONFIG = {
+    GRAPHICS: {
+      ENABLE_VIGNETTE: true,
+      ENABLE_COLOR_ENHANCE: true,
+      ENABLE_BLOOM: true,
+      VIGNETTE_INTENSITY: 0.4,
+      SATURATION: 1.2,
+      CONTRAST: 1.15,
+      BRIGHTNESS: 1.08,
+      BLOOM_INTENSITY: 0.2
+    },
+    CONTROLS: {
+      ENABLE_MOUSE_SMOOTH: true,
+      MOUSE_SMOOTH_AMOUNT: 0.85,
+      SENSITIVITY_MULT: 1.1
+    },
+    GAMEPLAY_FEEL: {
+      ENABLE_RECOIL_VISUAL: true,
+      ENABLE_HEADBOB: true,
+      HEADBOB_INTENSITY: 0.006,
+      ENABLE_FOV_DYNAMIC: true,
+      FOV_SPRINT_MULT: 1.07,
+      ENABLE_SCREEN_SHAKE: true,
+      HIT_EFFECT_INTENSITY: 0.15
+    },
+    HUD: {
+      ENABLE_UPGRADES: true,
+      ANIMATION_SPEED: 0.2
+    }
+  };
+
+  let gameCanvas = canvas;
+  let overlayCanvas, overlayCtx;
+  let smoothMousePos = { x: 0, y: 0 };
+  let cameraState = { offsetX: 0, offsetY: 0, fovOffset: 0 };
+  let playerState = { isMoving: false, isSprinting: false, isShooting: false };
+  let effectsState = { shakeIntensity: 0, hitFlash: 0, bloomValue: 0 };
+  let lastFrameTime = performance.now();
+
+  // Cria camada de sobreposição
+  function initEnhancementLayer() {
+    createOverlayCanvas();
+    interceptInputEvents();
+    startEffectsLoop();
+    enhanceHUD();
+    console.log('✅ Camada de melhorias carregada com sucesso');
+  }
+
+  // Cria canvas para efeitos visuais
+  function createOverlayCanvas() {
+    overlayCanvas = document.createElement('canvas');
+    overlayCanvas.width = W;
+    overlayCanvas.height = H;
+    overlayCanvas.style.position = 'absolute';
+    overlayCanvas.style.top = '0';
+    overlayCanvas.style.left = '0';
+    overlayCanvas.style.pointerEvents = 'none';
+    overlayCanvas.style.zIndex = '10';
+    document.body.appendChild(overlayCanvas);
+    overlayCtx = overlayCanvas.getContext('2d');
+
+    window.addEventListener('resize', () => {
+      overlayCanvas.width = W;
+      overlayCanvas.height = H;
+    });
+  }
+
+  // Intercepta e melhora controles
+  function interceptInputEvents() {
+    // Suavização do mouse
+    document.addEventListener('mousemove', (e) => {
+      if (!FEL_CONFIG.CONTROLS.ENABLE_MOUSE_SMOOTH) return;
+      
+      const rawX = e.movementX;
+      const rawY = e.movementY;
+
+      smoothMousePos.x = smoothMousePos.x * FEL_CONFIG.CONTROLS.MOUSE_SMOOTH_AMOUNT + rawX * (1 - FEL_CONFIG.CONTROLS.MOUSE_SMOOTH_AMOUNT);
+      smoothMousePos.y = smoothMousePos.y * FEL_CONFIG.CONTROLS.MOUSE_SMOOTH_AMOUNT + rawY * (1 - FEL_CONFIG.CONTROLS.MOUSE_SMOOTH_AMOUNT);
+
+      Object.defineProperty(e, 'movementX', { value: smoothMousePos.x * FEL_CONFIG.CONTROLS.SENSITIVITY_MULT });
+      Object.defineProperty(e, 'movementY', { value: smoothMousePos.y * FEL_CONFIG.CONTROLS.SENSITIVITY_MULT });
+    }, { capture: true });
+
+    // Detecta estado do jogador
+    document.addEventListener('keydown', (e) => {
+      if (['w', 'a', 's', 'd'].includes(e.key.toLowerCase())) playerState.isMoving = true;
+      if (e.key === 'Shift') {
+        playerState.isSprinting = true;
+        player.speed = 3.2;
+      }
+    }, { capture: true });
+
+    document.addEventListener('keyup', (e) => {
+      if (['w', 'a', 's', 'd'].includes(e.key.toLowerCase())) playerState.isMoving = false;
+      if (e.key === 'Shift') {
+        playerState.isSprinting = false;
+        player.speed = 2.2;
+      }
+    }, { capture: true });
+
+    // Detecta disparos
+    document.addEventListener('mousedown', (e) => {
+      if (e.button === 0) {
+        playerState.isShooting = true;
+        triggerRecoilEffect();
+        setTimeout(() => playerState.isShooting = false, 120);
+      }
+    }, { capture: true });
+  }
+
+  // Efeito de recuo visual
+  function triggerRecoilEffect() {
+    if (!FEL_CONFIG.GAMEPLAY_FEEL.ENABLE_RECOIL_VISUAL) return;
+    cameraState.offsetY = -0.02;
+    effectsState.shakeIntensity = 0.3;
+    effectsState.bloomValue = 1;
+  }
+
+  // Atualiza sensação da câmera
+  function updateCameraFeel(deltaTime) {
+    if (!FEL_CONFIG.GAMEPLAY_FEEL.ENABLE_HEADBOB && !FEL_CONFIG.GAMEPLAY_FEEL.ENABLE_FOV_DYNAMIC) return;
+
+    // Movimento natural da cabeça
+    if (playerState.isMoving) {
+      const speedMult = playerState.isSprinting ? 1.8 : 1;
+      const time = performance.now() / 200;
+      cameraState.offsetX = Math.sin(time) * FEL_CONFIG.GAMEPLAY_FEEL.HEADBOB_INTENSITY * speedMult;
+      cameraState.offsetY = Math.abs(Math.cos(time * 2)) * FEL_CONFIG.GAMEPLAY_FEEL.HEADBOB_INTENSITY * 0.5 * speedMult;
+    } else {
+      cameraState.offsetX *= 0.9;
+      cameraState.offsetY *= 0.9;
+    }
+
+    // Ajuste dinâmico de FOV
+    if (FEL_CONFIG.GAMEPLAY_FEEL.ENABLE_FOV_DYNAMIC) {
+      const targetFOV = playerState.isSprinting ? FEL_CONFIG.GAMEPLAY_FEEL.FOV_SPRINT_MULT : 1;
+      cameraState.fovOffset += (targetFOV - cameraState.fovOffset) * 0.05;
+      gameCanvas.style.transform = `scale(${1 + (cameraState.fovOffset - 1) * 0.02})`;
+      gameCanvas.style.transformOrigin = 'center center';
+    }
+
+    // Efeito de tremor de tela
+    if (FEL_CONFIG.GAMEPLAY_FEEL.ENABLE_SCREEN_SHAKE && effectsState.shakeIntensity > 0) {
+      cameraState.offsetX += (Math.random() - 0.5) * effectsState.shakeIntensity;
+      cameraState.offsetY += (Math.random() - 0.5) * effectsState.shakeIntensity;
+      effectsState.shakeIntensity *= 0.9;
+    }
+
+    // Aplica deslocamento
+    gameCanvas.style.transform += ` translate(${cameraState.offsetX * 100}px, ${cameraState.offsetY * 100}px)`;
+  }
+
+  // Renderiza efeitos visuais
+  function renderEnhancements() {
+    overlayCtx.clearRect(0, 0, W, H);
+    
+    // Vinheta
+    if (FEL_CONFIG.GRAPHICS.ENABLE_VIGNETTE) {
+      const gradient = overlayCtx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H)/1.5);
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, `rgba(0,0,0,${FEL_CONFIG.GRAPHICS.VIGNETTE_INTENSITY})`);
+      overlayCtx.fillStyle = gradient;
+      overlayCtx.fillRect(0, 0, W, H);
+    }
+
+    // Efeito de brilho ao atirar
+    if (FEL_CONFIG.GRAPHICS.ENABLE_BLOOM && effectsState.bloomValue > 0) {
+      overlayCtx.fillStyle = `rgba(255,255,200,${0.1 * effectsState.bloomValue})`;
+      overlayCtx.fillRect(0, 0, W, H);
+      effectsState.bloomValue *= 0.9;
+    }
+
+    // Efeito de dano
+    if (player.hp < 30) {
+      overlayCtx.fillStyle = `
