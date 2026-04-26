@@ -1,4 +1,27 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
+import { initGame, updateGame, shoot } from "./game.js";
+import { initApp, AppState } from "./app.js";
+
+let scene, camera, renderer;
+
+let keys = {};
+let mouseX = 0;
+let mouseY = 0;
+
+const player = {
+  position: new THREE.Vector3(0, 1.6, 5),
+  velocity: new THREE.Vector3(),
+  speed: 0.15,
+  hp: 100,
+  cooldown: 0
+};
+
+init();
+animate();
+
+function init() {
+  scene = new THREE.Scene();
+
   camera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -12,7 +35,7 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
   camera.position.copy(player.position);
 
-  // chão
+  // chão simples
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(200, 200),
     new THREE.MeshBasicMaterial({ color: 0x222222 })
@@ -27,8 +50,13 @@ import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 }
 
 function setupControls() {
-  document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-  document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+  document.addEventListener("keydown", (e) => {
+    keys[e.key.toLowerCase()] = true;
+  });
+
+  document.addEventListener("keyup", (e) => {
+    keys[e.key.toLowerCase()] = false;
+  });
 
   document.body.addEventListener("click", () => {
     document.body.requestPointerLock();
@@ -39,6 +67,8 @@ function setupControls() {
     if (document.pointerLockElement === document.body) {
       mouseX -= e.movementX * AppState.settings.sensitivity;
       mouseY -= e.movementY * AppState.settings.sensitivity;
+
+      mouseY = Math.max(-1.5, Math.min(1.5, mouseY));
     }
   });
 
@@ -50,10 +80,17 @@ function setupControls() {
 }
 
 function updatePlayer() {
-  let forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0,1,0), mouseX);
-  let right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0,1,0), mouseX);
+  const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    mouseX
+  );
 
-  let dir = new THREE.Vector3();
+  const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    mouseX
+  );
+
+  const dir = new THREE.Vector3();
 
   if (keys["w"]) dir.add(forward);
   if (keys["s"]) dir.sub(forward);
@@ -68,7 +105,9 @@ function updatePlayer() {
   player.position.add(player.velocity);
 
   camera.position.copy(player.position);
+
   camera.rotation.y = mouseX;
+  camera.rotation.x = mouseY;
 }
 
 function animate() {
