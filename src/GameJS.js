@@ -1,18 +1,29 @@
 window.addEventListener("DOMContentLoaded", () => {
   const app = document.getElementById("app");
 
+  // botão start
+  const button = document.createElement("button");
+  button.innerText = "START";
+  button.style.padding = "10px 20px";
+  button.style.background = "green";
+  button.style.color = "white";
+  button.style.border = "none";
+  button.style.cursor = "pointer";
+
+  app.appendChild(button);
+
+  // canvas
   const canvas = document.createElement("canvas");
   canvas.width = 900;
   canvas.height = 500;
+  canvas.style.display = "none";
   canvas.style.background = "#0d0d0d";
   canvas.style.border = "2px solid white";
   app.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
 
-  // =====================
-  // PLAYER
-  // =====================
+  // player
   const player = {
     x: 450,
     y: 430,
@@ -22,18 +33,14 @@ window.addEventListener("DOMContentLoaded", () => {
     cooldown: 0,
   };
 
-  // =====================
-  // INPUT
-  // =====================
   const keys = {};
 
   document.addEventListener("keydown", (e) => (keys[e.key] = true));
   document.addEventListener("keyup", (e) => (keys[e.key] = false));
 
-  // =====================
-  // BULLETS
-  // =====================
   const bullets = [];
+  const enemies = [];
+  let score = 0;
 
   function shoot() {
     if (player.cooldown <= 0) {
@@ -45,11 +52,6 @@ window.addEventListener("DOMContentLoaded", () => {
       player.cooldown = 15;
     }
   }
-
-  // =====================
-  // ENEMIES
-  // =====================
-  const enemies = [];
 
   function spawnEnemy() {
     enemies.push({
@@ -63,38 +65,28 @@ window.addEventListener("DOMContentLoaded", () => {
 
   setInterval(spawnEnemy, 1200);
 
-  // =====================
-  // GAME LOOP
-  // =====================
-  let score = 0;
-
   function update() {
-    // movimento
     if (keys["ArrowLeft"]) player.x -= player.speed;
     if (keys["ArrowRight"]) player.x += player.speed;
     if (keys["ArrowUp"]) player.y -= player.speed;
     if (keys["ArrowDown"]) player.y += player.speed;
 
-    // limites
+    if (keys[" "]) shoot();
+
+    player.cooldown--;
+
     player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
     player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
 
-    // tiro
-    if (keys[" "]) shoot();
-
-    if (player.cooldown > 0) player.cooldown--;
-
-    // bullets
     bullets.forEach((b, i) => {
       b.y -= b.speed;
       if (b.y < 0) bullets.splice(i, 1);
     });
 
-    // enemies
     enemies.forEach((e, ei) => {
       e.y += e.speed;
 
-      // colisão com player
+      // player hit
       if (
         e.x < player.x + player.w &&
         e.x + e.w > player.x &&
@@ -105,7 +97,7 @@ window.addEventListener("DOMContentLoaded", () => {
         enemies.length = 0;
       }
 
-      // colisão com bala
+      // bullet hit
       bullets.forEach((b, bi) => {
         if (
           b.x < e.x + e.w &&
@@ -122,11 +114,13 @@ window.addEventListener("DOMContentLoaded", () => {
   }
 
   function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     // fundo
     ctx.fillStyle = "#0d0d0d";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // mapa (grid leve)
+    // grid
     ctx.strokeStyle = "#1f1f1f";
     for (let i = 0; i < canvas.width; i += 50) {
       ctx.beginPath();
@@ -148,15 +142,11 @@ window.addEventListener("DOMContentLoaded", () => {
 
     // bullets
     ctx.fillStyle = "yellow";
-    bullets.forEach((b) => {
-      ctx.fillRect(b.x, b.y, 5, 10);
-    });
+    bullets.forEach((b) => ctx.fillRect(b.x, b.y, 5, 10));
 
     // enemies
     ctx.fillStyle = "red";
-    enemies.forEach((e) => {
-      ctx.fillRect(e.x, e.y, e.w, e.h);
-    });
+    enemies.forEach((e) => ctx.fillRect(e.x, e.y, e.w, e.h));
 
     // score
     ctx.fillStyle = "white";
@@ -170,5 +160,9 @@ window.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(loop);
   }
 
-  loop();
+  button.onclick = () => {
+    button.style.display = "none";
+    canvas.style.display = "block";
+    loop();
+  };
 });
