@@ -1,3 +1,5 @@
+import playerImg from "./assets/player.png";
+
 let player = { x: 500, y: 400, speed: 4 };
 let enemies = [];
 let bullets = [];
@@ -13,8 +15,9 @@ export function startGame(canvas) {
   window.addEventListener("keyup", (e) => (keys[e.key] = false));
 
   canvas.addEventListener("mousemove", (e) => {
-    mouse.x = e.clientX;
-    mouse.y = e.clientY;
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = e.clientX - rect.left;
+    mouse.y = e.clientY - rect.top;
   });
 
   canvas.addEventListener("click", shoot);
@@ -80,16 +83,22 @@ export function startGame(canvas) {
   }
 
   function drawPlayer() {
-    ctx.fillStyle = "blue";
-    ctx.beginPath();
-    ctx.arc(player.x, player.y, 15, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.drawImage(playerImg, player.x - 20, player.y - 20, 40, 40);
   }
 
   function drawEnemies() {
     enemies.forEach((e) => {
       ctx.fillStyle = "red";
       ctx.fillRect(e.x, e.y, 30, 30);
+    });
+  }
+
+  function drawBullets() {
+    ctx.fillStyle = "yellow";
+    bullets.forEach((b) => {
+      ctx.beginPath();
+      ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+      ctx.fill();
     });
   }
 
@@ -100,6 +109,7 @@ export function startGame(canvas) {
     drawMap();
     drawPlayer();
     drawEnemies();
+    drawBullets();
 
     requestAnimationFrame(loop);
   }
