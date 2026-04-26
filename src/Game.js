@@ -1,26 +1,43 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
-let enemies = [];
+/* =========================
+   🎮 STATE GLOBAL LIMPO
+========================= */
+
+let entities = {
+  enemies: [],
+  bullets: [],
+  zones: []
+};
+
 let score = 0;
 let wave = 1;
 let waveTimer = 0;
 
-let hitFlash = 0;
+/* =========================
+   🔫 WEAPONS
+========================= */
 
 const weapons = {
-  rifle: { ammo: 30, max: 30, damage: 45, spread: 0.015, cooldown: 6, speed: 1 },
-  shotgun: { ammo: 8, max: 8, damage: 90, spread: 0.08, cooldown: 18, speed: 0.8 },
-  sniper: { ammo: 5, max: 5, damage: 120, spread: 0.002, cooldown: 40, speed: 1.5 }
+  rifle: { ammo: 30, max: 30, damage: 45, spread: 0.015, cooldown: 6 },
+  shotgun: { ammo: 8, max: 8, damage: 90, spread: 0.09, cooldown: 18 },
+  sniper: { ammo: 5, max: 5, damage: 120, spread: 0.002, cooldown: 40 }
 };
 
 let currentWeapon = "rifle";
 let reloading = false;
+let ads = false;
 
-let bots = [];
+let hitFlash = 0;
+
+/* =========================
+   🚀 INIT
+========================= */
 
 export function initGame(scene) {
+
+  createZones(scene);
   spawnWave(scene);
-  spawnBots(scene);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "1") currentWeapon = "rifle";
@@ -28,20 +45,41 @@ export function initGame(scene) {
     if (e.key === "3") currentWeapon = "sniper";
     if (e.key === "r") reload();
   });
+
+  document.addEventListener("mousedown", e => {
+    if (e.button === 2) ads = true;
+  });
+
+  document.addEventListener("mouseup", e => {
+    if (e.button === 2) ads = false;
+  });
 }
 
-function spawnBots(scene) {
-  for (let i = 0; i < 3; i++) {
-    bots.push({
+/* =========================
+   🗺️ ZONAS DO MAPA
+========================= */
+
+function createZones(scene) {
+
+  for (let i = 0; i < 4; i++) {
+    entities.zones.push({
       id: i,
-      mood: "aggressive",
-      flank: Math.random() > 0.5
+      center: new THREE.Vector3(
+        (Math.random() - 0.5) * 100,
+        0,
+        (Math.random() - 0.5) * 100
+      )
     });
   }
 }
 
+/* =========================
+   👾 SPAWN
+========================= */
+
 function spawnWave(scene) {
-  const count = 10 + wave * 4;
+
+  const count = 12 + wave * 3;
 
   for (let i = 0; i < count; i++) spawnEnemy(scene);
 }
@@ -61,52 +99,63 @@ function spawnEnemy(scene) {
 
   scene.add(mesh);
 
-  enemies.push({
+  entities.enemies.push({
+    id: Math.random().toString(36).slice(2),
     mesh,
     hp: 100,
-    speed: 0.01 + Math.random() * 0.02,
-    id: Math.random(),
-    state: "hunt"
+    speed: 0.012 + Math.random() * 0.02,
+    state: "hunt",
+    zoneBias: Math.floor(Math.random() * 4),
+    memory: 0
   });
 }
+
+/* =========================
+   🔄 UPDATE LOOP
+========================= */
 
 export function updateGame(scene, camera, player) {
 
   waveTimer++;
 
-  if (enemies.length === 0 || waveTimer > 1200) {
+  if (entities.enemies.length === 0 || waveTimer > 1200) {
     wave++;
     waveTimer = 0;
     spawnWave(scene);
   }
 
-  for (let e of enemies) {
+  for (let e of entities.enemies) {
+
+    const targetZone = entities.zones[e.zoneBias];
 
     const toPlayer = new THREE.Vector3()
       .subVectors(player.position, e.mesh.position);
+
+    const toZone = new THREE.Vector3()
+      .subVectors(targetZone.center, e.mesh.position);
 
     const dist = toPlayer.length();
 
     toPlayer.normalize();
 
-    // 🧠 IA MAIS HUMANA
-    let move = toPlayer.clone();
+    // 🧠 IA MAIS HUMANA (DECISÃO)
+    let move = new THREE.Vector3();
 
-    if (dist < 10) {
-      move.add(new THREE.Vector3(
-        Math.sin(e.id + Date.now() * 0.001) * 0.3,
-        0,
-        Math.cos(e.id + Date.now() * 0.001) * 0.3
-      ));
+    if (dist < 8) {
+      // agressivo
+      move.add(toPlayer);
+    } else {
+      // patrulha por zona
+      move.add(toZone.multiplyScalar(0.5));
     }
 
-    if (dist < 5) {
-      // comportamento agressivo
-      move.multiplyScalar(1.2);
-    }
+    // leve random behavior (menos robô)
+    move.x += Math.sin(Date.now() * 0.001 + e.id) * 0.1;
+    move.z += Math.cos(Date.now() * 0.001 + e.id) * 0.1;
 
     e.mesh.position.add(move.multiplyScalar(e.speed));
 
+    // dano jogador
     if (dist < 1.3) {
       player.hp -= 0.6;
       hitFlash = 10;
@@ -123,6 +172,10 @@ export function updateGame(scene, camera, player) {
   }
 }
 
+/* =========================
+   🔫 SHOOT SYSTEM FINAL
+========================= */
+
 export function shoot(scene, camera, player) {
 
   const w = weapons[currentWeapon];
@@ -136,17 +189,18 @@ export function shoot(scene, camera, player) {
 
   const dir = camera.getWorldDirection(new THREE.Vector3());
 
-  // 🔫 balística leve (não laser perfeito)
-  dir.x += (Math.random() - 0.5) * w.spread;
-  dir.y += (Math.random() - 0.5) * w.spread;
+  const spread = ads ? w.spread * 0.3 : w.spread;
+
+  dir.x += (Math.random() - 0.5) * spread;
+  dir.y += (Math.random() - 0.5) * spread;
 
   raycaster.set(camera.position, dir.normalize());
 
-  const hits = raycaster.intersectObjects(enemies.map(e => e.mesh));
+  const hits = raycaster.intersectObjects(entities.enemies.map(e => e.mesh));
 
   if (hits.length > 0) {
 
-    const enemy = enemies.find(e => e.mesh === hits[0].object);
+    const enemy = entities.enemies.find(e => e.mesh === hits[0].object);
 
     if (enemy) {
 
@@ -156,30 +210,34 @@ export function shoot(scene, camera, player) {
 
       if (enemy.hp <= 0) {
         scene.remove(enemy.mesh);
-        enemies = enemies.filter(e => e !== enemy);
+        entities.enemies = entities.enemies.filter(e => e !== enemy);
         score += 10;
       }
 
       showHitmarker();
-      playSound("hit");
     }
-  } else {
-    playSound("shoot");
   }
 }
+
+/* =========================
+   🔄 RELOAD
+========================= */
 
 export function reload() {
 
   if (reloading) return;
 
   reloading = true;
-  playSound("reload");
 
   setTimeout(() => {
     weapons[currentWeapon].ammo = weapons[currentWeapon].max;
     reloading = false;
   }, 1200);
 }
+
+/* =========================
+   🎯 HUD
+========================= */
 
 function updateHUD(player) {
 
@@ -205,6 +263,10 @@ function updateHUD(player) {
     `${currentWeapon.toUpperCase()} | Ammo: ${w.ammo}/${w.max}`;
 }
 
+/* =========================
+   💥 HITMARKER
+========================= */
+
 function showHitmarker() {
   const m = document.createElement("div");
   m.innerText = "+";
@@ -213,28 +275,10 @@ function showHitmarker() {
   m.style.top = "50%";
   m.style.transform = "translate(-50%, -50%)";
   m.style.color = "white";
-  m.style.fontSize = "34px";
+  m.style.fontSize = "36px";
   m.style.fontWeight = "bold";
 
   document.body.appendChild(m);
-  setTimeout(() => m.remove(), 60);
-}
 
-function playSound(type) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-
-  o.connect(g);
-  g.connect(ctx.destination);
-
-  if (type === "shoot") o.frequency.value = 200;
-  if (type === "hit") o.frequency.value = 500;
-  if (type === "reload") o.frequency.value = 100;
-
-  g.gain.value = 0.05;
-
-  o.start();
-  o.stop(ctx.currentTime + 0.1);
+  setTimeout(() => m.remove(), 50);
 }
