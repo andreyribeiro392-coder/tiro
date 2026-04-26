@@ -1,21 +1,22 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
 /* =========================
-   🎮 STATE GLOBAL LIMPO
+   STATE LIMPO
 ========================= */
 
-let entities = {
-  enemies: [],
-  bullets: [],
-  zones: []
-};
+let enemies = [];
+let zones = [];
 
 let score = 0;
 let wave = 1;
 let waveTimer = 0;
+let hitFlash = 0;
+
+let reloading = false;
+let ads = false;
 
 /* =========================
-   🔫 WEAPONS
+   WEAPONS
 ========================= */
 
 const weapons = {
@@ -25,13 +26,9 @@ const weapons = {
 };
 
 let currentWeapon = "rifle";
-let reloading = false;
-let ads = false;
-
-let hitFlash = 0;
 
 /* =========================
-   🚀 INIT
+   INIT
 ========================= */
 
 export function initGame(scene) {
@@ -40,10 +37,10 @@ export function initGame(scene) {
   spawnWave(scene);
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "r") reload();
     if (e.key === "1") currentWeapon = "rifle";
     if (e.key === "2") currentWeapon = "shotgun";
     if (e.key === "3") currentWeapon = "sniper";
-    if (e.key === "r") reload();
   });
 
   document.addEventListener("mousedown", e => {
@@ -56,14 +53,13 @@ export function initGame(scene) {
 }
 
 /* =========================
-   🗺️ ZONAS DO MAPA
+   ZONES
 ========================= */
 
 function createZones(scene) {
 
   for (let i = 0; i < 4; i++) {
-    entities.zones.push({
-      id: i,
+    zones.push({
       center: new THREE.Vector3(
         (Math.random() - 0.5) * 100,
         0,
@@ -74,13 +70,11 @@ function createZones(scene) {
 }
 
 /* =========================
-   👾 SPAWN
+   SPAWN
 ========================= */
 
 function spawnWave(scene) {
-
-  const count = 12 + wave * 3;
-
+  const count = 10 + wave * 3;
   for (let i = 0; i < count; i++) spawnEnemy(scene);
 }
 
@@ -92,70 +86,60 @@ function spawnEnemy(scene) {
   );
 
   mesh.position.set(
-    (Math.random() - 0.5) * 120,
+    (Math.random() - 0.5) * 100,
     0.5,
-    (Math.random() - 0.5) * 120
+    (Math.random() - 0.5) * 100
   );
 
   scene.add(mesh);
 
-  entities.enemies.push({
-    id: Math.random().toString(36).slice(2),
+  enemies.push({
     mesh,
     hp: 100,
-    speed: 0.012 + Math.random() * 0.02,
-    state: "hunt",
-    zoneBias: Math.floor(Math.random() * 4),
-    memory: 0
+    speed: 0.015 + Math.random() * 0.02,
+    zone: Math.floor(Math.random() * zones.length)
   });
 }
 
 /* =========================
-   🔄 UPDATE LOOP
+   UPDATE
 ========================= */
 
 export function updateGame(scene, camera, player) {
 
   waveTimer++;
 
-  if (entities.enemies.length === 0 || waveTimer > 1200) {
+  if (enemies.length === 0 || waveTimer > 1200) {
     wave++;
     waveTimer = 0;
     spawnWave(scene);
   }
 
-  for (let e of entities.enemies) {
+  for (let e of enemies) {
 
-    const targetZone = entities.zones[e.zoneBias];
+    const zone = zones[e.zone];
 
     const toPlayer = new THREE.Vector3()
       .subVectors(player.position, e.mesh.position);
 
     const toZone = new THREE.Vector3()
-      .subVectors(targetZone.center, e.mesh.position);
+      .subVectors(zone.center, e.mesh.position);
 
     const dist = toPlayer.length();
 
-    toPlayer.normalize();
-
-    // 🧠 IA MAIS HUMANA (DECISÃO)
     let move = new THREE.Vector3();
 
     if (dist < 8) {
-      // agressivo
-      move.add(toPlayer);
+      move.add(toPlayer.normalize());
     } else {
-      // patrulha por zona
       move.add(toZone.multiplyScalar(0.5));
     }
 
-    // leve random behavior (menos robô)
-    move.x += Math.sin(Date.now() * 0.001 + e.id) * 0.1;
-    move.z += Math.cos(Date.now() * 0.001 + e.id) * 0.1;
+    move.x += Math.sin(Date.now() * 0.001 + dist) * 0.05;
+    move.z += Math.cos(Date.now() * 0.001 + dist) * 0.05;
 
     e.mesh.position.add(move.multiplyScalar(e.speed));
 
-    // dano jogador
     if (dist < 1.3) {
       player.hp -= 0.6;
       hitFlash = 10;
@@ -164,16 +148,14 @@ export function updateGame(scene, camera, player) {
 
   updateHUD(player);
 
-  if (hitFlash > 0) {
-    hitFlash--;
-    document.body.style.filter = "brightness(1.8) contrast(1.2)";
-  } else {
-    document.body.style.filter = "none";
-  }
+  document.body.style.filter =
+    hitFlash > 0 ? "brightness(1.8)" : "none";
+
+  if (hitFlash > 0) hitFlash--;
 }
 
 /* =========================
-   🔫 SHOOT SYSTEM FINAL
+   SHOOT
 ========================= */
 
 export function shoot(scene, camera, player) {
@@ -196,21 +178,19 @@ export function shoot(scene, camera, player) {
 
   raycaster.set(camera.position, dir.normalize());
 
-  const hits = raycaster.intersectObjects(entities.enemies.map(e => e.mesh));
+  const hits = raycaster.intersectObjects(enemies.map(e => e.mesh));
 
   if (hits.length > 0) {
 
-    const enemy = entities.enemies.find(e => e.mesh === hits[0].object);
+    const enemy = enemies.find(e => e.mesh === hits[0].object);
 
     if (enemy) {
 
       enemy.hp -= w.damage;
 
-      camera.rotation.x -= 0.02;
-
       if (enemy.hp <= 0) {
         scene.remove(enemy.mesh);
-        entities.enemies = entities.enemies.filter(e => e !== enemy);
+        enemies = enemies.filter(e => e !== enemy);
         score += 10;
       }
 
@@ -220,7 +200,7 @@ export function shoot(scene, camera, player) {
 }
 
 /* =========================
-   🔄 RELOAD
+   RELOAD
 ========================= */
 
 export function reload() {
@@ -236,38 +216,26 @@ export function reload() {
 }
 
 /* =========================
-   🎯 HUD
+   HUD
 ========================= */
 
 function updateHUD(player) {
 
   const w = weapons[currentWeapon];
 
-  document.getElementById("hp").innerText =
-    "HP: " + Math.max(0, Math.floor(player.hp));
+  const hp = document.getElementById("hp");
+  const scoreEl = document.getElementById("score");
 
-  document.getElementById("score").innerText =
-    `Score: ${score} | Wave: ${wave}`;
-
-  if (!document.getElementById("ammo")) {
-    const div = document.createElement("div");
-    div.id = "ammo";
-    div.style.position = "absolute";
-    div.style.top = "80px";
-    div.style.left = "10px";
-    div.style.color = "white";
-    document.body.appendChild(div);
-  }
-
-  document.getElementById("ammo").innerText =
-    `${currentWeapon.toUpperCase()} | Ammo: ${w.ammo}/${w.max}`;
+  if (hp) hp.innerText = "HP: " + Math.max(0, Math.floor(player.hp));
+  if (scoreEl) scoreEl.innerText = `Score: ${score} | Wave: ${wave}`;
 }
 
 /* =========================
-   💥 HITMARKER
+   HITMARKER
 ========================= */
 
 function showHitmarker() {
+
   const m = document.createElement("div");
   m.innerText = "+";
   m.style.position = "absolute";
@@ -280,5 +248,5 @@ function showHitmarker() {
 
   document.body.appendChild(m);
 
-  setTimeout(() => m.remove(), 50);
+  setTimeout(() => m.remove(), 60);
 }
