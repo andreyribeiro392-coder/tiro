@@ -1,20 +1,33 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
 
+/* =========================
+   STATE LIMPO
+========================= */
+
+export let viewMode = "first";
 export let yaw = 0;
 export let pitch = 0;
-export let viewMode = "first";
 
 const keys = {};
 const sensitivity = 0.0022;
 
 /* =========================
-   INPUT
+   INPUT SYSTEM
 ========================= */
 
 export function initPlayerControls() {
 
-  document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
-  document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+  document.addEventListener("keydown", e => {
+    keys[e.key.toLowerCase()] = true;
+
+    if (e.key === "v") {
+      viewMode = viewMode === "first" ? "third" : "first";
+    }
+  });
+
+  document.addEventListener("keyup", e => {
+    keys[e.key.toLowerCase()] = false;
+  });
 
   document.addEventListener("mousemove", (e) => {
 
@@ -29,16 +42,10 @@ export function initPlayerControls() {
   document.body.addEventListener("click", () => {
     document.body.requestPointerLock();
   });
-
-  document.addEventListener("keydown", e => {
-    if (e.key === "v") {
-      viewMode = viewMode === "first" ? "third" : "first";
-    }
-  });
 }
 
 /* =========================
-   MOVIMENTO + CÂMERA
+   PLAYER + CAMERA UPDATE
 ========================= */
 
 export function updatePlayerView(camera, player) {
@@ -59,6 +66,10 @@ export function updatePlayerView(camera, player) {
   if (move.length() > 0) move.normalize();
 
   player.position.add(move.multiplyScalar(player.speed));
+
+  /* =========================
+     CAMERA MODES
+  ========================= */
 
   if (viewMode === "first") {
 
@@ -82,8 +93,52 @@ export function updatePlayerView(camera, player) {
 }
 
 /* =========================
-   EXPORT COMPAT (IMPORTANTE)
-   evita erro de “update missing”
+   WEAPON VIEWMODEL (ARMA NA MÃO)
+========================= */
+
+export function createWeaponView(camera) {
+
+  const weapon = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 0.2, 1),
+    new THREE.MeshBasicMaterial({ color: 0x222222 })
+  );
+
+  const barrel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.8),
+    new THREE.MeshBasicMaterial({ color: 0x111111 })
+  );
+
+  barrel.position.z = -0.8;
+
+  weapon.add(body);
+  weapon.add(barrel);
+
+  weapon.position.set(0.5, -0.3, -1);
+
+  camera.add(weapon);
+
+  return weapon;
+}
+
+/* =========================
+   WEAPON UPDATE (ADS / RECOIL BASE)
+========================= */
+
+export function updateWeaponView(weapon, ads) {
+
+  if (!weapon) return;
+
+  const targetZ = ads ? -0.6 : -1;
+
+  weapon.position.z += (targetZ - weapon.position.z) * 0.15;
+
+  weapon.rotation.x *= 0.9;
+}
+
+/* =========================
+   INPUT EXPORT (COMPAT)
 ========================= */
 
 export function getInputState() {
