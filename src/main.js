@@ -1,3 +1,3 @@
-import { startGame } from "./AppJS";
+import { startGame } from "./GameJS";
 
 startGame();
