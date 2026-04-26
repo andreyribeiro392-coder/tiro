@@ -1,33 +1,63 @@
-export function startGame() {
-  const app = document.getElementById("app");
+const app = document.getElementById("app");
 
-  const canvas = document.createElement("canvas");
-  canvas.width = 800;
-  canvas.height = 500;
-  app.appendChild(canvas);
+// botão
+const button = document.createElement("button");
+button.innerText = "START";
+button.style.padding = "10px 20px";
+button.style.background = "green";
+button.style.color = "white";
+button.style.border = "none";
+button.style.cursor = "pointer";
 
-  const ctx = canvas.getContext("2d");
+app.appendChild(button);
 
-  const player = { x: 380, y: 420, w: 40, h: 40, speed: 6 };
+// canvas
+const canvas = document.createElement("canvas");
+canvas.width = 800;
+canvas.height = 500;
+canvas.style.display = "none"; // começa escondido
+app.appendChild(canvas);
 
-  const keys = {};
+const ctx = canvas.getContext("2d");
 
-  document.addEventListener("keydown", e => keys[e.key] = true);
-  document.addEventListener("keyup", e => keys[e.key] = false);
+// jogador
+const player = {
+  x: 380,
+  y: 420,
+  w: 40,
+  h: 40,
+  speed: 6,
+};
 
-  function loop() {
-    if (keys["ArrowLeft"]) player.x -= player.speed;
-    if (keys["ArrowRight"]) player.x += player.speed;
+const keys = {};
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#111";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+document.addEventListener("keydown", (e) => (keys[e.key] = true));
+document.addEventListener("keyup", (e) => (keys[e.key] = false));
 
-    ctx.fillStyle = "lime";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-
-    requestAnimationFrame(loop);
-  }
-
+// clique no botão
+button.onclick = () => {
+  button.style.display = "none";
+  canvas.style.display = "block";
   loop();
+};
+
+function update() {
+  if (keys["ArrowLeft"]) player.x -= player.speed;
+  if (keys["ArrowRight"]) player.x += player.speed;
+}
+
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "#111";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "lime";
+  ctx.fillRect(player.x, player.y, player.w, player.h);
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
 }
