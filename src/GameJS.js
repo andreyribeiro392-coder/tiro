@@ -17,24 +17,25 @@
   const keys = {};
   let angle = 0;
 
-  const player = { x: 3.5, y: 3.5 };
+  const player = { x: 6, y: 6 };
 
-  // 🗺 MAPA (1 = pedra, 2 = grama, 3 = árvore)
-  const map = [
-    "111111111111111",
-    "100000000000001",
-    "102222000022201",
-    "100020000020001",
-    "100020000020001",
-    "100000033000001",
-    "100020000020001",
-    "102222000022201",
-    "100000000000001",
-    "111111111111111",
-  ];
+  // 🗺 MAPA ABERTO (não labirinto)
+  const mapW = 20;
+  const mapH = 20;
+
+  const map = [];
+  for (let y = 0; y < mapH; y++) {
+    const row = [];
+    for (let x = 0; x < mapW; x++) {
+      const border = x === 0 || y === 0 || x === mapW - 1 || y === mapH - 1;
+      const tree = Math.random() < 0.08;
+      row.push(border ? 1 : tree ? 2 : 0);
+    }
+    map.push(row);
+  }
 
   const FOV = Math.PI / 3;
-  const DEPTH = 18;
+  const DEPTH = 25;
 
   window.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
   window.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
@@ -48,24 +49,19 @@
   });
 
   function tile(x, y) {
-    return map[Math.floor(y)]?.[Math.floor(x)] || "0";
+    return map[Math.floor(y)]?.[Math.floor(x)] ?? 1;
   }
 
   function isWall(x, y) {
-    return tile(x, y) !== "0";
+    return tile(x, y) === 1;
   }
 
-  function getColor(type, dist) {
-    const fog = Math.max(0, 255 - dist * 18);
-
-    if (type === "1") return `rgb(${fog},${fog},${fog})`;       // pedra
-    if (type === "2") return `rgb(40,${fog},60)`;              // grama
-    if (type === "3") return `rgb(20,120,40)`;                 // árvore
-    return `rgb(${fog},${fog},${fog})`;
+  function isTree(x, y) {
+    return tile(x, y) === 2;
   }
 
   function update() {
-    const speed = 0.05;
+    const speed = 0.06;
 
     let dx = 0, dy = 0;
 
@@ -98,28 +94,32 @@
       const x = player.x + Math.cos(rayAngle) * dist;
       const y = player.y + Math.sin(rayAngle) * dist;
 
-      if (isWall(x, y)) {
-        return { dist, type: tile(x, y) };
-      }
+      if (isWall(x, y)) return { dist, type: "wall" };
 
       dist += step;
     }
 
-    return { dist: DEPTH, type: "0" };
+    return { dist: DEPTH, type: "none" };
   }
 
-  function renderSky() {
+  function sky() {
     const g = ctx.createLinearGradient(0, 0, 0, H());
-    g.addColorStop(0, "#0b1a2a");
-    g.addColorStop(0.5, "#1b2a3a");
-    g.addColorStop(1, "#2a1f1a");
+    g.addColorStop(0, "#4aa3ff");
+    g.addColorStop(0.5, "#87c7ff");
+    g.addColorStop(1, "#2c6b2f");
 
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W(), H());
   }
 
+  function ground() {
+    ctx.fillStyle = "#2f6b2f";
+    ctx.fillRect(0, H() / 2, W(), H() / 2);
+  }
+
   function render() {
-    renderSky();
+    sky();
+    ground();
 
     for (let x = 0; x < W(); x++) {
       const rayAngle = (angle - FOV / 2) + (x / W()) * FOV;
@@ -127,42 +127,49 @@
 
       const dist = hit.dist;
 
-      const lineHeight = (H() / (dist + 0.0001));
+      const height = H() / (dist + 0.0001);
 
-      const color = getColor(hit.type, dist);
+      // 🪨 parede com textura fake (noise + shading)
+      let shade = 255 - dist * 18;
+      shade = Math.max(40, shade);
 
-      ctx.fillStyle = color;
+      const noise = Math.random() * 20;
+
+      ctx.fillStyle = `rgb(${shade - 30 + noise},${shade - 30 + noise},${shade - 30 + noise})`;
+
       ctx.fillRect(
         x,
-        H() / 2 - lineHeight / 2,
+        H() / 2 - height / 2,
         1,
-        lineHeight
+        height
       );
     }
 
-    // 🌳 sprites fake (árvores simples)
-    for (let i = 0; i < map.length; i++) {
-      for (let j = 0; j < map[i].length; j++) {
-        if (map[i][j] === "3") {
-          const dx = j - player.x;
-          const dy = i - player.y;
-          const dist = Math.hypot(dx, dy);
+    // 🌳 árvores (sprites fake realistas)
+    for (let y = 0; y < mapH; y++) {
+      for (let x = 0; x < mapW; x++) {
+        if (!isTree(x, y)) continue;
 
-          const size = Math.max(0, 300 / dist);
+        const dx = x - player.x;
+        const dy = y - player.y;
+        const dist = Math.hypot(dx, dy);
 
-          const screenX = W() / 2 + dx * 40;
-          const screenY = H() / 2 + dy * 40;
+        if (dist < 0.5) continue;
 
-          ctx.fillStyle = `rgba(0,180,80,${1 - dist / 20})`;
-          ctx.fillRect(screenX, screenY, size, size);
-        }
+        const size = 400 / dist;
+
+        const screenX = W() / 2 + dx * 60;
+        const screenY = H() / 2 + dy * 60;
+
+        ctx.fillStyle = `rgba(20,120,40,${1 - dist / 25})`;
+        ctx.fillRect(screenX, screenY, size, size * 1.5);
       }
     }
 
     // HUD
     ctx.fillStyle = "white";
     ctx.font = "16px Arial";
-    ctx.fillText("FPS MAP TEST (TEXTURED)", 20, 25);
+    ctx.fillText("FPS WORLD (REALISTIC MAP MODE)", 20, 25);
   }
 
   function loop() {
