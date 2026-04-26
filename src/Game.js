@@ -6,47 +6,89 @@ let wave = 1;
 let waveTimer = 0;
 
 let hitFlash = 0;
+let ads = false;
 
-// 🔫 ARMAS
 const weapons = {
-  rifle: { ammo: 30, max: 30, damage: 50, spread: 0.015, cooldown: 6 },
-  shotgun: { ammo: 8, max: 8, damage: 80, spread: 0.08, cooldown: 18 },
-  sniper: { ammo: 5, max: 5, damage: 100, spread: 0.002, cooldown: 40 }
+  rifle: { ammo: 30, max: 30, damage: 45, spread: 0.015, cooldown: 6 },
+  shotgun: { ammo: 8, max: 8, damage: 90, spread: 0.08, cooldown: 18 },
+  sniper: { ammo: 5, max: 5, damage: 120, spread: 0.002, cooldown: 40 }
 };
 
 let currentWeapon = "rifle";
 let reloading = false;
 
+let pickups = [];
+
 export function initGame(scene) {
+
+  createArena(scene);
   spawnWave(scene);
 
+  // 🎮 CONTROLES
   document.addEventListener("keydown", (e) => {
     if (e.key === "1") currentWeapon = "rifle";
     if (e.key === "2") currentWeapon = "shotgun";
     if (e.key === "3") currentWeapon = "sniper";
-
     if (e.key === "r") reload();
+  });
+
+  document.addEventListener("mousedown", (e) => {
+    if (e.button === 2) ads = true;
+  });
+
+  document.addEventListener("mouseup", (e) => {
+    if (e.button === 2) ads = false;
   });
 }
 
-function spawnWave(scene) {
-  const count = 6 + wave * 3;
+function createArena(scene) {
 
-  for (let i = 0; i < count; i++) {
-    spawnEnemy(scene);
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(200, 200),
+    new THREE.MeshBasicMaterial({ color: 0x1a1a1a })
+  );
+
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // paredes externas
+  const wallMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
+
+  const walls = [
+    [-100, 0, 0, 2, 50],
+    [100, 0, 0, 2, 50],
+    [0, 0, -100, 200, 2],
+    [0, 0, 100, 200, 2],
+  ];
+
+  for (let w of walls) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(w[3], 3, w[4]),
+      wallMat
+    );
+
+    mesh.position.set(w[0], 1.5, w[2]);
+    scene.add(mesh);
   }
 }
 
+function spawnWave(scene) {
+  const count = 8 + wave * 3;
+
+  for (let i = 0; i < count; i++) spawnEnemy(scene);
+}
+
 function spawnEnemy(scene) {
+
   const mesh = new THREE.Mesh(
     new THREE.BoxGeometry(1, 1, 1),
     new THREE.MeshBasicMaterial({ color: 0xff4444 })
   );
 
   mesh.position.set(
-    (Math.random() - 0.5) * 80,
+    (Math.random() - 0.5) * 120,
     0.5,
-    (Math.random() - 0.5) * 80
+    (Math.random() - 0.5) * 120
   );
 
   scene.add(mesh);
@@ -55,7 +97,7 @@ function spawnEnemy(scene) {
     mesh,
     hp: 100,
     speed: 0.012 + Math.random() * 0.02,
-    group: Math.floor(Math.random() * 3) // 👾 grupos
+    role: Math.random() < 0.3 ? "flank" : "normal"
   });
 }
 
@@ -63,66 +105,106 @@ export function updateGame(scene, camera, player) {
 
   waveTimer++;
 
-  if (enemies.length === 0 || waveTimer > 900) {
+  if (enemies.length === 0 || waveTimer > 1000) {
     wave++;
     waveTimer = 0;
     spawnWave(scene);
   }
 
-  // 👾 IA EM GRUPO
   for (let e of enemies) {
-
-    const groupCenter = getGroupCenter(e.group);
 
     const toPlayer = new THREE.Vector3()
       .subVectors(player.position, e.mesh.position);
-
-    const toGroup = new THREE.Vector3()
-      .subVectors(groupCenter, e.mesh.position)
-      .multiplyScalar(0.3);
 
     const dist = toPlayer.length();
 
     toPlayer.normalize();
 
-    const move = toPlayer.add(toGroup);
+    let move = toPlayer;
 
+    // 🤖 FLANK SYSTEM
+    if (e.role === "flank") {
+      move = new THREE.Vector3(
+        -toPlayer.z,
+        0,
+        toPlayer.x
+      ).multiplyScalar(0.5).add(toPlayer);
+    }
+
+    // movimentação
     e.mesh.position.add(move.multiplyScalar(e.speed * (1 + 1 / Math.max(dist, 1))));
 
+    // dano
     if (dist < 1.3) {
       player.hp -= 0.6;
       hitFlash = 10;
     }
   }
 
+  updateLoot(scene, player);
+
   updateHUD(player);
 
   if (hitFlash > 0) {
     hitFlash--;
-    document.body.style.filter = "brightness(1.7)";
+    document.body.style.filter = "brightness(1.8)";
   } else {
     document.body.style.filter = "none";
   }
 }
 
-function getGroupCenter(group) {
-  const members = enemies.filter(e => e.group === group);
-  const center = new THREE.Vector3();
+function updateLoot(scene, player) {
 
-  for (let m of members) {
-    center.add(m.mesh.position);
+  if (pickups.length < 3 && Math.random() < 0.01) {
+    spawnPickup(scene);
   }
 
-  return members.length ? center.divideScalar(members.length) : new THREE.Vector3();
+  for (let p of pickups) {
+    const dist = p.position.distanceTo(player.position);
+
+    if (dist < 1.5) {
+
+      if (p.type === "ammo") {
+        weapons[currentWeapon].ammo = weapons[currentWeapon].max;
+      }
+
+      if (p.type === "health") {
+        player.hp = Math.min(100, player.hp + 30);
+      }
+
+      scene.remove(p.mesh);
+      pickups = pickups.filter(x => x !== p);
+    }
+  }
+}
+
+function spawnPickup(scene) {
+
+  const type = Math.random() < 0.5 ? "ammo" : "health";
+
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(0.6, 0.6, 0.6),
+    new THREE.MeshBasicMaterial({
+      color: type === "ammo" ? 0x00ffcc : 0x00ff00
+    })
+  );
+
+  mesh.position.set(
+    (Math.random() - 0.5) * 100,
+    0.5,
+    (Math.random() - 0.5) * 100
+  );
+
+  scene.add(mesh);
+
+  pickups.push({ mesh, position: mesh.position, type });
 }
 
 export function shoot(scene, camera, player) {
 
   const w = weapons[currentWeapon];
 
-  if (reloading) return;
-  if (player.cooldown > 0) return;
-  if (w.ammo <= 0) return;
+  if (reloading || player.cooldown > 0 || w.ammo <= 0) return;
 
   player.cooldown = w.cooldown;
   w.ammo--;
@@ -131,8 +213,10 @@ export function shoot(scene, camera, player) {
 
   const dir = camera.getWorldDirection(new THREE.Vector3());
 
-  dir.x += (Math.random() - 0.5) * w.spread;
-  dir.y += (Math.random() - 0.5) * w.spread;
+  const spread = ads ? w.spread * 0.3 : w.spread;
+
+  dir.x += (Math.random() - 0.5) * spread;
+  dir.y += (Math.random() - 0.5) * spread;
 
   raycaster.set(camera.position, dir.normalize());
 
@@ -159,20 +243,20 @@ export function shoot(scene, camera, player) {
   }
 }
 
-function reload() {
+export function reload() {
 
   if (reloading) return;
 
   reloading = true;
 
   setTimeout(() => {
-    const w = weapons[currentWeapon];
-    w.ammo = w.max;
+    weapons[currentWeapon].ammo = weapons[currentWeapon].max;
     reloading = false;
   }, 1200);
 }
 
 function updateHUD(player) {
+
   const w = weapons[currentWeapon];
 
   document.getElementById("hp").innerText =
@@ -184,10 +268,10 @@ function updateHUD(player) {
   if (!document.getElementById("ammo")) {
     const div = document.createElement("div");
     div.id = "ammo";
-    div.style.color = "white";
     div.style.position = "absolute";
     div.style.top = "80px";
     div.style.left = "10px";
+    div.style.color = "white";
     document.body.appendChild(div);
   }
 
@@ -203,7 +287,7 @@ function showHitmarker() {
   m.style.top = "50%";
   m.style.transform = "translate(-50%, -50%)";
   m.style.color = "white";
-  m.style.fontSize = "32px";
+  m.style.fontSize = "34px";
   m.style.fontWeight = "bold";
 
   document.body.appendChild(m);
