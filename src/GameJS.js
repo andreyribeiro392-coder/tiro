@@ -1,7 +1,7 @@
 window.addEventListener("DOMContentLoaded", () => {
   const app = document.getElementById("app");
 
-  // botão start
+  // botão
   const button = document.createElement("button");
   button.innerText = "START";
   button.style.padding = "10px 20px";
@@ -19,6 +19,7 @@ window.addEventListener("DOMContentLoaded", () => {
   canvas.style.display = "none";
   canvas.style.background = "#0d0d0d";
   canvas.style.border = "2px solid white";
+
   app.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
@@ -73,7 +74,7 @@ window.addEventListener("DOMContentLoaded", () => {
 
     if (keys[" "]) shoot();
 
-    player.cooldown--;
+    if (player.cooldown > 0) player.cooldown--;
 
     player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
     player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
@@ -86,7 +87,7 @@ window.addEventListener("DOMContentLoaded", () => {
     enemies.forEach((e, ei) => {
       e.y += e.speed;
 
-      // player hit
+      // colisão player
       if (
         e.x < player.x + player.w &&
         e.x + e.w > player.x &&
@@ -97,7 +98,7 @@ window.addEventListener("DOMContentLoaded", () => {
         enemies.length = 0;
       }
 
-      // bullet hit
+      // colisão bala
       bullets.forEach((b, bi) => {
         if (
           b.x < e.x + e.w &&
