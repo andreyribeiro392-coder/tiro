@@ -5,10 +5,23 @@
   <title>Car Game</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <style>
-    body { margin: 0; overflow: hidden; background: black; }
+    body { margin:0; overflow:hidden; background:#000; }
+    #hud {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      color: white;
+      font-family: Arial;
+      font-size: 16px;
+    }
   </style>
 </head>
 <body>
+  <div id="hud">
+    <div id="speed">Speed: 0</div>
+    <div id="nitro">Nitro: 100</div>
+  </div>
+
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
