@@ -4,7 +4,7 @@ import { initApp, AppState } from "./app.js";
 
 let scene, camera, renderer;
 
-let keys = {};
+const keys = {};
 let mouseX = 0;
 let mouseY = 0;
 
@@ -35,7 +35,6 @@ function init() {
 
   camera.position.copy(player.position);
 
-  // chão simples
   const ground = new THREE.Mesh(
     new THREE.PlaneGeometry(200, 200),
     new THREE.MeshBasicMaterial({ color: 0x222222 })
@@ -97,7 +96,7 @@ function updatePlayer() {
   if (keys["a"]) dir.sub(right);
   if (keys["d"]) dir.add(right);
 
-  dir.normalize();
+  if (dir.length() > 0) dir.normalize();
 
   player.velocity.add(dir.multiplyScalar(player.speed));
   player.velocity.multiplyScalar(0.85);
