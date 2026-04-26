@@ -15,12 +15,12 @@ app.appendChild(button);
 const canvas = document.createElement("canvas");
 canvas.width = 800;
 canvas.height = 500;
-canvas.style.display = "none"; // começa escondido
+canvas.style.display = "none";
 app.appendChild(canvas);
 
 const ctx = canvas.getContext("2d");
 
-// jogador
+// player
 const player = {
   x: 380,
   y: 420,
@@ -31,10 +31,11 @@ const player = {
 
 const keys = {};
 
+// controles
 document.addEventListener("keydown", (e) => (keys[e.key] = true));
 document.addEventListener("keyup", (e) => (keys[e.key] = false));
 
-// clique no botão
+// botão inicia jogo
 button.onclick = () => {
   button.style.display = "none";
   canvas.style.display = "block";
