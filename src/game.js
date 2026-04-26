@@ -1,61 +1,33 @@
-const app = document.getElementById("app");
+export function startGame() {
+  const app = document.getElementById("app");
 
-// cria canvas
-const canvas = document.createElement("canvas");
-canvas.width = 800;
-canvas.height = 500;
-canvas.style.background = "#111";
-canvas.style.border = "2px solid white";
+  const canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 500;
+  app.appendChild(canvas);
 
-app.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
 
-const ctx = canvas.getContext("2d");
+  const player = { x: 380, y: 420, w: 40, h: 40, speed: 6 };
 
-// jogador
-const player = {
-  x: 380,
-  y: 420,
-  w: 40,
-  h: 40,
-  speed: 6,
-};
+  const keys = {};
 
-const keys = {};
+  document.addEventListener("keydown", e => keys[e.key] = true);
+  document.addEventListener("keyup", e => keys[e.key] = false);
 
-// controles
-document.addEventListener("keydown", (e) => {
-  keys[e.key] = true;
-});
+  function loop() {
+    if (keys["ArrowLeft"]) player.x -= player.speed;
+    if (keys["ArrowRight"]) player.x += player.speed;
 
-document.addEventListener("keyup", (e) => {
-  keys[e.key] = false;
-});
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#111";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-function update() {
-  if (keys["ArrowLeft"]) player.x -= player.speed;
-  if (keys["ArrowRight"]) player.x += player.speed;
+    ctx.fillStyle = "lime";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
 
-  // limites da tela
-  if (player.x < 0) player.x = 0;
-  if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
+    requestAnimationFrame(loop);
+  }
+
+  loop();
 }
-
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  // fundo
-  ctx.fillStyle = "#111";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  // jogador
-  ctx.fillStyle = "lime";
-  ctx.fillRect(player.x, player.y, player.w, player.h);
-}
-
-function loop() {
-  update();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-loop();
