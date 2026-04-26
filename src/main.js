@@ -10,6 +10,7 @@ animate();
 function init() {
 
   scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x000000, 50, 300);
 
   camera = new THREE.PerspectiveCamera(
     75,
@@ -22,26 +23,27 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // PLAYER (OBRIGATÓRIO)
   player = {
     position: new THREE.Vector3(0, 0.5, 0),
     rotation: { y: 0 },
-    speed: 1
+    speed: 0
   };
 
-  // posição inicial câmera
-  camera.position.set(0, 5, 10);
-  camera.lookAt(0, 0, 0);
-
-  // luz (IMPORTANTE PRA NÃO FICAR TUDO PRETO)
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(10, 20, 10);
+  // iluminação (melhora gráfico MUITO)
+  const light = new THREE.DirectionalLight(0xffffff, 1.2);
+  light.position.set(50, 100, 50);
   scene.add(light);
 
-  // inicia jogo
+  const ambient = new THREE.AmbientLight(0x404040);
+  scene.add(ambient);
+
   initGame(scene, camera, player);
 
-  window.addEventListener("resize", onResize);
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
 }
 
 function animate() {
@@ -50,10 +52,4 @@ function animate() {
   updateGame(scene, camera, player);
 
   renderer.render(scene, camera);
-}
-
-function onResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
 }
