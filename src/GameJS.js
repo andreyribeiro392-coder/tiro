@@ -1,234 +1,212 @@
-(() => {
-  const canvas = document.querySelector("canvas") || document.createElement("canvas");
-  if (!canvas.parentNode) document.body.appendChild(canvas);
+// GameJS.js — FPS Canvas 2D Engine
 
-  const ctx = canvas.getContext("2d");
+const canvas = document.querySelector("canvas") || document.createElement("canvas");
+const ctx = canvas.getContext("2d");
 
-  function resize() {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-  }
-  resize();
-  window.addEventListener("resize", resize);
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+document.body.appendChild(canvas);
 
-  const W = () => canvas.width;
-  const H = () => canvas.height;
+const keys = {};
+let mouseX = 0;
+let mouseY = 0;
+let pointerLocked = false;
 
-  const keys = {};
-  let angle = 0;
+document.addEventListener("keydown", e => keys[e.code] = true);
+document.addEventListener("keyup", e => keys[e.code] = false);
 
-  const ui = {
-    inventory: false,
-    map: false
-  };
+canvas.addEventListener("click", () => {
+    canvas.requestPointerLock();
+});
 
-  const player = {
+document.addEventListener("pointerlockchange", () => {
+    pointerLocked = document.pointerLockElement === canvas;
+});
+
+document.addEventListener("mousemove", e => {
+    if (!pointerLocked) return;
+    player.angle += e.movementX * player.sens;
+    player.pitch -= e.movementY * player.sens;
+    player.pitch = Math.max(-1, Math.min(1, player.pitch));
+});
+
+const map = {
+    width: 20,
+    height: 20,
+    grid: []
+};
+
+for (let y = 0; y < map.height; y++) {
+    map.grid[y] = [];
+    for (let x = 0; x < map.width; x++) {
+        map.grid[y][x] = (Math.random() < 0.12) ? 1 : 0;
+    }
+}
+
+const player = {
     x: 5,
     y: 5,
+    angle: 0,
+    pitch: 0,
+    speed: 0.05,
+    runSpeed: 0.09,
+    sens: 0.002,
     hp: 100,
+    ammo: 30,
     weapon: 1,
     recoil: 0
-  };
+};
 
-  const weapons = {
-    1: { name: "Pistola", dmg: 20, range: 10 },
-    2: { name: "Rifle", dmg: 10, range: 18 }
-  };
+const enemies = [];
 
-  const enemies = [];
-
-  const map = [
-    "111111111111",
-    "100000000001",
-    "100011000001",
-    "100000000001",
-    "100000000001",
-    "100001110001",
-    "100000000001",
-    "111111111111",
-  ];
-
-  const FOV = Math.PI / 3;
-  const DEPTH = 20;
-
-  function rand(a, b) {
-    return Math.random() * (b - a) + a;
-  }
-
-  function spawnEnemy() {
+function spawnEnemy() {
     enemies.push({
-      x: rand(2, 10),
-      y: rand(2, 6),
-      hp: 50,
-      speed: 0.02
+        x: Math.random() * 18 + 1,
+        y: Math.random() * 18 + 1,
+        hp: 100,
+        speed: 0.02 + Math.random() * 0.02
     });
-  }
+}
 
-  for (let i = 0; i < 5; i++) spawnEnemy();
+for (let i = 0; i < 8; i++) spawnEnemy();
 
-  window.addEventListener("keydown", (e) => {
-    keys[e.key.toLowerCase()] = true;
+let score = 0;
 
-    if (e.key === "1") player.weapon = 1;
-    if (e.key === "2") player.weapon = 2;
+function castRay(angle) {
+    let dist = 0;
+    let step = 0.02;
 
-    if (e.key.toLowerCase() === "i") ui.inventory = !ui.inventory;
-    if (e.key.toLowerCase() === "m") ui.map = !ui.map;
-  });
+    let dx = Math.cos(angle) * step;
+    let dy = Math.sin(angle) * step;
 
-  window.addEventListener("keyup", (e) => {
-    keys[e.key.toLowerCase()] = false;
-  });
+    let x = player.x;
+    let y = player.y;
 
-  canvas.addEventListener("click", () => {
-    canvas.requestPointerLock?.();
-    shoot();
-  });
+    while (dist < 20) {
+        x += dx;
+        y += dy;
+        dist += step;
 
-  document.addEventListener("mousemove", (e) => {
-    if (document.pointerLockElement === canvas) {
-      angle += e.movementX * 0.002;
-    }
-  });
+        let mx = Math.floor(x);
+        let my = Math.floor(y);
 
-  function isWall(x, y) {
-    return map[Math.floor(y)]?.[Math.floor(x)] === "1";
-  }
-
-  function shoot() {
-    const w = weapons[player.weapon];
-
-    let hit = null;
-    let distHit = 999;
-
-    for (const e of enemies) {
-      const dx = e.x - player.x;
-      const dy = e.y - player.y;
-      const dist = Math.hypot(dx, dy);
-
-      const dir = (dx * Math.cos(angle) + dy * Math.sin(angle)) / dist;
-
-      if (dir > 0.98 && dist < w.range) {
-        if (dist < distHit) {
-          hit = e;
-          distHit = dist;
+        if (map.grid[my] && map.grid[my][mx]) {
+            return dist;
         }
-      }
     }
+    return 20;
+}
+
+function shoot() {
+    if (player.ammo <= 0) return;
+    player.ammo--;
+
+    let hit = enemies.find(e => {
+        let dx = e.x - player.x;
+        let dy = e.y - player.y;
+        let dist = Math.hypot(dx, dy);
+        let angle = Math.atan2(dy, dx) - player.angle;
+
+        return Math.abs(angle) < 0.1 && dist < 8;
+    });
 
     if (hit) {
-      hit.hp -= w.dmg;
-
-      if (hit.hp <= 0) {
-        enemies.splice(enemies.indexOf(hit), 1);
-        spawnEnemy();
-      }
+        hit.hp -= 50;
+        if (hit.hp <= 0) {
+            enemies.splice(enemies.indexOf(hit), 1);
+            score++;
+            spawnEnemy();
+        }
     }
 
-    player.recoil = 10;
-  }
+    player.recoil = 0.2;
+}
 
-  function update() {
-    const speed = 0.05;
+document.addEventListener("mousedown", shoot);
 
-    let dx = 0, dy = 0;
+function update() {
+    let moveSpeed = keys["ShiftLeft"] ? player.runSpeed : player.speed;
 
-    if (keys["w"]) {
-      dx += Math.cos(angle) * speed;
-      dy += Math.sin(angle) * speed;
+    if (keys["KeyW"]) {
+        player.x += Math.cos(player.angle) * moveSpeed;
+        player.y += Math.sin(player.angle) * moveSpeed;
     }
-    if (keys["s"]) {
-      dx -= Math.cos(angle) * speed;
-      dy -= Math.sin(angle) * speed;
+    if (keys["KeyS"]) {
+        player.x -= Math.cos(player.angle) * moveSpeed;
+        player.y -= Math.sin(player.angle) * moveSpeed;
     }
-    if (keys["a"]) {
-      dx += Math.cos(angle - Math.PI / 2) * speed;
-      dy += Math.sin(angle - Math.PI / 2) * speed;
+    if (keys["KeyA"]) {
+        player.x += Math.cos(player.angle - Math.PI / 2) * moveSpeed;
+        player.y += Math.sin(player.angle - Math.PI / 2) * moveSpeed;
     }
-    if (keys["d"]) {
-      dx += Math.cos(angle + Math.PI / 2) * speed;
-      dy += Math.sin(angle + Math.PI / 2) * speed;
-    }
-
-    if (!isWall(player.x + dx, player.y)) player.x += dx;
-    if (!isWall(player.x, player.y + dy)) player.y += dy;
-
-    player.recoil *= 0.85;
-
-    for (const e of enemies) {
-      const dx = player.x - e.x;
-      const dy = player.y - e.y;
-      const dist = Math.hypot(dx, dy);
-
-      e.x += (dx / dist) * e.speed;
-      e.y += (dy / dist) * e.speed;
-
-      if (dist < 0.5) player.hp -= 0.2;
-    }
-  }
-
-  function cast(rayAngle) {
-    let dist = 0;
-
-    while (dist < DEPTH) {
-      const x = player.x + Math.cos(rayAngle) * dist;
-      const y = player.y + Math.sin(rayAngle) * dist;
-
-      if (isWall(x, y)) return dist;
-
-      dist += 0.02;
+    if (keys["KeyD"]) {
+        player.x += Math.cos(player.angle + Math.PI / 2) * moveSpeed;
+        player.y += Math.sin(player.angle + Math.PI / 2) * moveSpeed;
     }
 
-    return DEPTH;
-  }
+    enemies.forEach(e => {
+        let dx = player.x - e.x;
+        let dy = player.y - e.y;
+        let dist = Math.hypot(dx, dy);
 
-  function render() {
-    ctx.fillStyle = "#0a0f14";
-    ctx.fillRect(0, 0, W(), H());
+        e.x += (dx / dist) * e.speed * 0.5;
+        e.y += (dy / dist) * e.speed * 0.5;
 
-    for (let x = 0; x < W(); x++) {
-      const rayAngle = (angle - FOV / 2) + (x / W()) * FOV;
-      const dist = cast(rayAngle);
+        if (dist < 0.5) player.hp -= 0.5;
+    });
 
-      const h = H() / (dist + 0.001);
+    if (player.recoil > 0) player.recoil -= 0.02;
+}
 
-      const shade = 255 - dist * 20;
+function render() {
+    ctx.fillStyle = "#87CEEB";
+    ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
 
-      ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-      ctx.fillRect(x, H() / 2 - h / 2 + player.recoil, 1, h);
+    ctx.fillStyle = "#2d5f2d";
+    ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
+
+    const fov = Math.PI / 3;
+    const rays = canvas.width;
+
+    for (let i = 0; i < rays; i++) {
+        let rayAngle = player.angle - fov / 2 + (i / rays) * fov;
+        let dist = castRay(rayAngle);
+
+        let lineHeight = (canvas.height / dist) * 0.8;
+
+        ctx.fillStyle = `rgb(${255 - dist * 12}, ${100}, ${100})`;
+        ctx.fillRect(i, canvas.height / 2 - lineHeight / 2, 1, lineHeight);
     }
 
-    // HUD
+    enemies.forEach(e => {
+        let dx = e.x - player.x;
+        let dy = e.y - player.y;
+        let dist = Math.hypot(dx, dy);
+        let angle = Math.atan2(dy, dx) - player.angle;
+
+        if (Math.abs(angle) < fov / 2) {
+            let size = (canvas.height / dist) * 0.2;
+            let x = (angle / fov + 0.5) * canvas.width;
+
+            ctx.fillStyle = "red";
+            ctx.fillRect(x, canvas.height / 2 - size / 2, size, size);
+        }
+    });
+
     ctx.fillStyle = "white";
-    ctx.fillText("HP: " + player.hp.toFixed(0), 20, 20);
-    ctx.fillText("Weapon: " + weapons[player.weapon].name, 20, 40);
+    ctx.fillRect(canvas.width / 2 - 5, canvas.height / 2 - 5, 10, 10);
 
-    // INVENTORY
-    if (ui.inventory) {
-      ctx.fillStyle = "rgba(0,0,0,0.7)";
-      ctx.fillRect(100, 100, 300, 200);
+    ctx.fillStyle = "black";
+    ctx.font = "16px Arial";
+    ctx.fillText(`HP: ${player.hp.toFixed(0)}`, 20, 20);
+    ctx.fillText(`Ammo: ${player.ammo}`, 20, 40);
+    ctx.fillText(`Score: ${score}`, 20, 60);
+}
 
-      ctx.fillStyle = "white";
-      ctx.fillText("INVENTÁRIO", 120, 130);
-      ctx.fillText("1 - Pistola", 120, 160);
-      ctx.fillText("2 - Rifle", 120, 190);
-    }
-
-    // MAP
-    if (ui.map) {
-      ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(W() - 200, 20, 180, 180);
-
-      ctx.fillStyle = "lime";
-      ctx.fillRect(W() - 200 + player.x * 10, 20 + player.y * 10, 5, 5);
-    }
-  }
-
-  function loop() {
+function loop() {
     update();
     render();
     requestAnimationFrame(loop);
-  }
+}
 
-  loop();
-})();
+loop();
