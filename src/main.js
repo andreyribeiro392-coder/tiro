@@ -1,6 +1,6 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-import { initGame, updateGame, shoot } from "./game.js";
-import { initApp, AppState } from "./app.js";
+import { initGame, updateGame, shoot } from "./Game.js";
+import { initApp, AppState } from "./App.js";
 
 let scene, camera, renderer;
 
@@ -12,8 +12,7 @@ const player = {
   position: new THREE.Vector3(0, 1.6, 5),
   velocity: new THREE.Vector3(),
   speed: 0.15,
-  hp: 100,
-  cooldown: 0
+  hp: 100
 };
 
 init();
@@ -49,13 +48,8 @@ function init() {
 }
 
 function setupControls() {
-  document.addEventListener("keydown", (e) => {
-    keys[e.key.toLowerCase()] = true;
-  });
-
-  document.addEventListener("keyup", (e) => {
-    keys[e.key.toLowerCase()] = false;
-  });
+  document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+  document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
   document.body.addEventListener("click", () => {
     document.body.requestPointerLock();
@@ -80,12 +74,12 @@ function setupControls() {
 
 function updatePlayer() {
   const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(
-    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0,1,0),
     mouseX
   );
 
   const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(
-    new THREE.Vector3(0, 1, 0),
+    new THREE.Vector3(0,1,0),
     mouseX
   );
 
@@ -104,7 +98,6 @@ function updatePlayer() {
   player.position.add(player.velocity);
 
   camera.position.copy(player.position);
-
   camera.rotation.y = mouseX;
   camera.rotation.x = mouseY;
 }
