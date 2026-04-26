@@ -1,112 +1,130 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js";
-import { initGame, updateGame, shoot } from "./Game.js";
-import { initApp, AppState } from "./App.js";
 
-let scene, camera, renderer;
+export let viewMode = "first"; // first | third
 
-const keys = {};
-let mouseX = 0;
-let mouseY = 0;
+export let yaw = 0;
+export let pitch = 0;
 
-const player = {
-  position: new THREE.Vector3(0, 1.6, 5),
-  velocity: new THREE.Vector3(),
-  speed: 0.15,
-  hp: 100
-};
+const sensitivity = 0.0022;
 
-init();
-animate();
+export const keys = {};
 
-function init() {
-  scene = new THREE.Scene();
+/* =========================
+   PLAYER CONTROLLER INPUT
+========================= */
 
-  camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    1000
-  );
+export function initPlayerControls(camera) {
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
-
-  camera.position.copy(player.position);
-
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshBasicMaterial({ color: 0x222222 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-
-  initGame(scene);
-  initApp();
-
-  setupControls();
-}
-
-function setupControls() {
   document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
   document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
+  document.addEventListener("mousemove", (e) => {
+
+    if (document.pointerLockElement !== document.body) return;
+
+    yaw -= e.movementX * sensitivity;
+    pitch -= e.movementY * sensitivity;
+
+    pitch = Math.max(-1.5, Math.min(1.5, pitch));
+  });
+
   document.body.addEventListener("click", () => {
     document.body.requestPointerLock();
-    shoot(scene, camera, player);
   });
 
-  document.addEventListener("mousemove", (e) => {
-    if (document.pointerLockElement === document.body) {
-      mouseX -= e.movementX * AppState.settings.sensitivity;
-      mouseY -= e.movementY * AppState.settings.sensitivity;
-
-      mouseY = Math.max(-1.5, Math.min(1.5, mouseY));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "v") {
+      viewMode = viewMode === "first" ? "third" : "first";
     }
   });
-
-  window.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-  });
 }
 
-function updatePlayer() {
-  const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(
-    new THREE.Vector3(0,1,0),
-    mouseX
-  );
+/* =========================
+   PLAYER UPDATE CAMERA
+========================= */
 
-  const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(
-    new THREE.Vector3(0,1,0),
-    mouseX
-  );
+export function updatePlayerView(camera, player) {
 
-  const dir = new THREE.Vector3();
+  const forward = new THREE.Vector3(0, 0, -1)
+    .applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
 
-  if (keys["w"]) dir.add(forward);
-  if (keys["s"]) dir.sub(forward);
-  if (keys["a"]) dir.sub(right);
-  if (keys["d"]) dir.add(right);
+  const right = new THREE.Vector3(1, 0, 0)
+    .applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
 
-  if (dir.length() > 0) dir.normalize();
+  let move = new THREE.Vector3();
 
-  player.velocity.add(dir.multiplyScalar(player.speed));
-  player.velocity.multiplyScalar(0.85);
+  if (keys["w"]) move.add(forward);
+  if (keys["s"]) move.sub(forward);
+  if (keys["a"]) move.sub(right);
+  if (keys["d"]) move.add(right);
 
-  player.position.add(player.velocity);
+  if (move.length() > 0) move.normalize();
 
-  camera.position.copy(player.position);
-  camera.rotation.y = mouseX;
-  camera.rotation.x = mouseY;
+  player.position.add(move.multiplyScalar(player.speed));
+
+  /* =========================
+     CAMERA MODES
+  ========================= */
+
+  if (viewMode === "first") {
+
+    camera.position.copy(player.position);
+    camera.position.y += 1.6;
+
+  } else {
+
+    const offset = new THREE.Vector3(0, 3, 6)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+
+    camera.position.copy(player.position).add(offset);
+  }
+
+  camera.rotation.order = "YXZ";
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
 }
 
-function animate() {
-  requestAnimationFrame(animate);
+/* =========================
+   WEAPON VIEWMODEL (ARMA NA MÃO)
+========================= */
 
-  updatePlayer();
-  updateGame(scene, camera, player);
+export function createWeaponView(camera) {
 
-  renderer.render(scene, camera);
+  const weapon = new THREE.Group();
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.3, 0.2, 1),
+    new THREE.MeshBasicMaterial({ color: 0x222222 })
+  );
+
+  const barrel = new THREE.Mesh(
+    new THREE.BoxGeometry(0.1, 0.1, 0.8),
+    new THREE.MeshBasicMaterial({ color: 0x111111 })
+  );
+
+  barrel.position.z = -0.8;
+
+  weapon.add(body);
+  weapon.add(barrel);
+
+  weapon.position.set(0.5, -0.3, -1);
+
+  camera.add(weapon);
+
+  return weapon;
+}
+
+/* =========================
+   UPDATE WEAPON FEEL (RECOIL + ADS SUPPORT)
+========================= */
+
+export function updateWeaponView(weapon, ads) {
+
+  if (!weapon) return;
+
+  const targetZ = ads ? -0.6 : -1;
+
+  weapon.position.z += (targetZ - weapon.position.z) * 0.15;
+
+  weapon.rotation.x *= 0.9;
 }
