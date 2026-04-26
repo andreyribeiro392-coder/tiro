@@ -24,41 +24,79 @@ export function initGame(scene, camera, player) {
 }
 
 /* =========================
-   🌍 MUNDO MELHORADO
+   🌍 MUNDO + CÉU + CIDADE
 ========================= */
 
 function createWorld(scene) {
 
-  // chão melhor
+  // chão
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(2000, 2000),
-    new THREE.MeshStandardMaterial({
-      color: 0x1a1a1a,
-      roughness: 0.9,
-      metalness: 0.1
-    })
+    new THREE.PlaneGeometry(3000, 3000),
+    new THREE.MeshStandardMaterial({ color: 0x1a1a1a })
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  // grid leve (sensação de movimento)
-  const grid = new THREE.GridHelper(2000, 200, 0xffffff, 0x444444);
+  // grid leve
+  const grid = new THREE.GridHelper(3000, 200, 0x444444, 0x222222);
   scene.add(grid);
 
-  // luz forte (resolve escuridão)
-  const light = new THREE.DirectionalLight(0xffffff, 1.5);
-  light.position.set(50, 100, 50);
+  // luz
+  const light = new THREE.DirectionalLight(0xffffff, 1.3);
+  light.position.set(100, 200, 100);
   scene.add(light);
 
-  // luz ambiente
-  scene.add(new THREE.AmbientLight(0x555555));
+  scene.add(new THREE.AmbientLight(0x666666));
 
-  // "céu" fake (gradiente)
-  scene.background = new THREE.Color(0x0a0a0a);
+  /* =========================
+     🌌 SKYBOX (CÉU 3D)
+  ========================= */
+
+  const skyGeo = new THREE.SphereGeometry(1500, 32, 32);
+  const skyMat = new THREE.MeshBasicMaterial({
+    color: 0x87ceeb,
+    side: THREE.BackSide
+  });
+
+  const sky = new THREE.Mesh(skyGeo, skyMat);
+  scene.add(sky);
+
+  /* =========================
+     🏙️ PRÉDIOS
+  ========================= */
+
+  for (let i = 0; i < 120; i++) {
+
+    const height = 10 + Math.random() * 60;
+
+    const building = new THREE.Mesh(
+      new THREE.BoxGeometry(
+        10 + Math.random() * 20,
+        height,
+        10 + Math.random() * 20
+      ),
+      new THREE.MeshStandardMaterial({
+        color: new THREE.Color(
+          Math.random() * 0.2 + 0.1,
+          Math.random() * 0.2 + 0.1,
+          Math.random() * 0.2 + 0.1
+        ),
+        roughness: 0.7
+      })
+    );
+
+    building.position.set(
+      (Math.random() - 0.5) * 2000,
+      height / 2,
+      (Math.random() - 0.5) * 2000
+    );
+
+    scene.add(building);
+  }
 }
 
 /* =========================
-   🚗 CARRO MELHOR
+   🚗 CARRO
 ========================= */
 
 function createCar(color) {
@@ -67,11 +105,7 @@ function createCar(color) {
 
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(2, 0.6, 4),
-    new THREE.MeshStandardMaterial({
-      color,
-      metalness: 0.5,
-      roughness: 0.4
-    })
+    new THREE.MeshStandardMaterial({ color })
   );
 
   const cabin = new THREE.Mesh(
@@ -117,11 +151,9 @@ function spawnAI(scene) {
 
 export function updateGame(scene, camera, player) {
 
-  // aceleração
   if (keys["w"]) speed += 0.04;
   if (keys["s"]) speed -= 0.03;
 
-  // nitro
   if (keys["shift"] && nitro > 0) {
     speed += 0.08;
     nitro -= 0.7;
@@ -131,13 +163,11 @@ export function updateGame(scene, camera, player) {
 
   nitro = Math.max(0, Math.min(100, nitro));
 
-  // atrito
   speed *= 0.97;
 
-  // curva baseada na velocidade
   if (Math.abs(speed) > 0.05) {
-    if (keys["a"]) angle += 0.035 * (speed);
-    if (keys["d"]) angle -= 0.035 * (speed);
+    if (keys["a"]) angle += 0.035 * speed;
+    if (keys["d"]) angle -= 0.035 * speed;
   }
 
   const forward = new THREE.Vector3(
@@ -152,13 +182,8 @@ export function updateGame(scene, camera, player) {
   player.mesh.position.copy(player.position);
   player.mesh.rotation.y = angle;
 
-  /* =========================
-     🎥 CÂMERA MELHORADA
-  ========================= */
-
-  const camDistance = 10 + Math.abs(speed * 20);
-
-  const camOffset = new THREE.Vector3(0, 5, -camDistance)
+  // câmera
+  const camOffset = new THREE.Vector3(0, 6, -12)
     .applyAxisAngle(new THREE.Vector3(0,1,0), angle);
 
   camera.position.lerp(
@@ -168,10 +193,7 @@ export function updateGame(scene, camera, player) {
 
   camera.lookAt(player.position);
 
-  /* =========================
-     🚗 IA
-  ========================= */
-
+  // IA
   for (let c of cars) {
 
     const dir = new THREE.Vector3(
@@ -186,10 +208,7 @@ export function updateGame(scene, camera, player) {
     c.mesh.rotation.y = c.angle;
   }
 
-  /* =========================
-     HUD
-  ========================= */
-
+  // HUD
   const speedEl = document.getElementById("speed");
   const nitroEl = document.getElementById("nitro");
 
