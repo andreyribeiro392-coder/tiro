@@ -1,154 +1,101 @@
 window.addEventListener("DOMContentLoaded", () => {
   const app = document.getElementById("app");
 
-  if (!app) {
-    console.error("Elemento #app não encontrado no HTML");
-    return;
-  }
-
-  // =====================
-  // BOTÃO START
-  // =====================
+  // botão start
   const button = document.createElement("button");
-  button.innerText = "START";
-  button.style.padding = "12px 24px";
-  button.style.background = "green";
-  button.style.color = "white";
-  button.style.border = "none";
-  button.style.cursor = "pointer";
-  button.style.fontSize = "16px";
-
+  button.innerText = "START FPS";
   app.appendChild(button);
 
-  // =====================
-  // CANVAS
-  // =====================
+  // canvas
   const canvas = document.createElement("canvas");
   canvas.width = 900;
   canvas.height = 500;
   canvas.style.display = "none";
-  canvas.style.background = "#0d0d0d";
-  canvas.style.border = "2px solid white";
-
+  canvas.style.background = "#111";
   app.appendChild(canvas);
 
   const ctx = canvas.getContext("2d");
 
-  // =====================
-  // PLAYER
-  // =====================
+  // player (FPS simulado)
   const player = {
     x: 450,
-    y: 430,
-    w: 35,
-    h: 35,
-    speed: 6,
-    cooldown: 0,
+    y: 450,
+    speed: 4,
+    hp: 100,
   };
 
-  // =====================
-  // INPUT
-  // =====================
   const keys = {};
-
   document.addEventListener("keydown", (e) => (keys[e.key] = true));
   document.addEventListener("keyup", (e) => (keys[e.key] = false));
 
-  // =====================
-  // BULLETS
-  // =====================
-  const bullets = [];
-
-  function shoot() {
-    if (player.cooldown <= 0) {
-      bullets.push({
-        x: player.x + player.w / 2,
-        y: player.y,
-        speed: 8,
-      });
-      player.cooldown = 15;
-    }
-  }
-
-  // =====================
-  // ENEMIES
-  // =====================
+  // inimigos
   const enemies = [];
 
   function spawnEnemy() {
     enemies.push({
-      x: Math.random() * (canvas.width - 30),
+      x: Math.random() * canvas.width,
       y: -20,
-      w: 30,
-      h: 30,
-      speed: 2 + Math.random() * 2,
+      size: 25,
+      speed: 1.5 + Math.random() * 2,
     });
   }
 
-  setInterval(spawnEnemy, 1200);
+  setInterval(spawnEnemy, 1000);
 
-  // =====================
-  // GAME LOOP
-  // =====================
   let score = 0;
+  let shootingCooldown = 0;
+
+  function shoot() {
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+
+      // "raycast simples"
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+
+      if (Math.abs(dx) < 40 && dy < 200) {
+        enemies.splice(i, 1);
+        score += 10;
+        break;
+      }
+    }
+  }
 
   function update() {
     // movimento
-    if (keys["ArrowLeft"]) player.x -= player.speed;
-    if (keys["ArrowRight"]) player.x += player.speed;
-    if (keys["ArrowUp"]) player.y -= player.speed;
-    if (keys["ArrowDown"]) player.y += player.speed;
-
-    // tiro
-    if (keys[" "]) shoot();
-
-    if (player.cooldown > 0) player.cooldown--;
+    if (keys["ArrowLeft"] || keys["a"]) player.x -= player.speed;
+    if (keys["ArrowRight"] || keys["d"]) player.x += player.speed;
+    if (keys["ArrowUp"] || keys["w"]) player.y -= player.speed;
+    if (keys["ArrowDown"] || keys["s"]) player.y += player.speed;
 
     // limites
-    player.x = Math.max(0, Math.min(canvas.width - player.w, player.x));
-    player.y = Math.max(0, Math.min(canvas.height - player.h, player.y));
+    player.x = Math.max(0, Math.min(canvas.width, player.x));
+    player.y = Math.max(0, Math.min(canvas.height, player.y));
 
-    // bullets
-    for (let i = bullets.length - 1; i >= 0; i--) {
-      const b = bullets[i];
-      b.y -= b.speed;
-
-      if (b.y < 0) bullets.splice(i, 1);
+    // tiro
+    if (keys[" "] && shootingCooldown <= 0) {
+      shoot();
+      shootingCooldown = 15;
     }
 
-    // enemies
-    for (let ei = enemies.length - 1; ei >= 0; ei--) {
-      const e = enemies[ei];
+    if (shootingCooldown > 0) shootingCooldown--;
+
+    // inimigos descendo
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
       e.y += e.speed;
 
       // colisão com player
-      if (
-        e.x < player.x + player.w &&
-        e.x + e.w > player.x &&
-        e.y < player.y + player.h &&
-        e.y + e.h > player.y
-      ) {
-        score = 0;
-        enemies.length = 0;
-        bullets.length = 0;
-        break;
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+
+      if (Math.sqrt(dx * dx + dy * dy) < 30) {
+        player.hp -= 10;
+        enemies.splice(i, 1);
       }
 
-      // colisão com bala
-      for (let bi = bullets.length - 1; bi >= 0; bi--) {
-        const b = bullets[bi];
-
-        if (
-          b.x < e.x + e.w &&
-          b.x > e.x &&
-          b.y < e.y + e.h &&
-          b.y > e.y
-        ) {
-          enemies.splice(ei, 1);
-          bullets.splice(bi, 1);
-          score += 10;
-          break;
-        }
+      if (e.y > canvas.height) {
+        enemies.splice(i, 1);
       }
     }
   }
@@ -156,42 +103,35 @@ window.addEventListener("DOMContentLoaded", () => {
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // fundo
-    ctx.fillStyle = "#0d0d0d";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    // chão / céu (FPS vibe)
+    ctx.fillStyle = "#222";
+    ctx.fillRect(0, canvas.height / 2, canvas.width, canvas.height / 2);
 
-    // grid
-    ctx.strokeStyle = "#1f1f1f";
-    for (let i = 0; i < canvas.width; i += 50) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, canvas.height);
-      ctx.stroke();
-    }
+    ctx.fillStyle = "#333";
+    ctx.fillRect(0, 0, canvas.width, canvas.height / 2);
 
-    for (let i = 0; i < canvas.height; i += 50) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(canvas.width, i);
-      ctx.stroke();
-    }
+    // mira
+    ctx.strokeStyle = "white";
+    ctx.beginPath();
+    ctx.moveTo(canvas.width / 2 - 10, canvas.height / 2);
+    ctx.lineTo(canvas.width / 2 + 10, canvas.height / 2);
+    ctx.moveTo(canvas.width / 2, canvas.height / 2 - 10);
+    ctx.lineTo(canvas.width / 2, canvas.height / 2 + 10);
+    ctx.stroke();
 
-    // player
-    ctx.fillStyle = "lime";
-    ctx.fillRect(player.x, player.y, player.w, player.h);
+    // inimigos (simulando distância)
+    enemies.forEach((e) => {
+      const size = e.size + (e.y / canvas.height) * 50;
 
-    // bullets
-    ctx.fillStyle = "yellow";
-    bullets.forEach((b) => ctx.fillRect(b.x, b.y, 5, 10));
+      ctx.fillStyle = "red";
+      ctx.fillRect(e.x, e.y, size, size);
+    });
 
-    // enemies
-    ctx.fillStyle = "red";
-    enemies.forEach((e) => ctx.fillRect(e.x, e.y, e.w, e.h));
-
-    // score
+    // HUD
     ctx.fillStyle = "white";
-    ctx.font = "18px Arial";
-    ctx.fillText("Score: " + score, 10, 20);
+    ctx.font = "16px Arial";
+    ctx.fillText("HP: " + player.hp, 10, 20);
+    ctx.fillText("Score: " + score, 10, 40);
   }
 
   function loop() {
@@ -200,7 +140,6 @@ window.addEventListener("DOMContentLoaded", () => {
     requestAnimationFrame(loop);
   }
 
-  // botão inicia jogo
   button.onclick = () => {
     button.style.display = "none";
     canvas.style.display = "block";
