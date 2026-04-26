@@ -1,12 +1,44 @@
-body {
+* {
   margin: 0;
-  background: black;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #000;
+  font-family: Arial, Helvetica, sans-serif;
+  overflow: hidden;
+}
+
+/* centraliza o jogo */
+#app {
+  width: 100vw;
+  height: 100vh;
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
+  flex-direction: column;
 }
 
+/* botão START */
+button {
+  margin-bottom: 15px;
+  padding: 12px 24px;
+  background: #00c853;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+button:hover {
+  transform: scale(1.05);
+  background: #00e676;
+}
+
+/* canvas do jogo */
 canvas {
-  border: 2px solid white;
+  box-shadow: 0 0 20px rgba(0, 255, 100, 0.3);
 }
