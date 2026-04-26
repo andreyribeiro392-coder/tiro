@@ -6,74 +6,42 @@ let wave = 1;
 let waveTimer = 0;
 
 let hitFlash = 0;
-let ads = false;
 
 const weapons = {
-  rifle: { ammo: 30, max: 30, damage: 45, spread: 0.015, cooldown: 6 },
-  shotgun: { ammo: 8, max: 8, damage: 90, spread: 0.08, cooldown: 18 },
-  sniper: { ammo: 5, max: 5, damage: 120, spread: 0.002, cooldown: 40 }
+  rifle: { ammo: 30, max: 30, damage: 45, spread: 0.015, cooldown: 6, speed: 1 },
+  shotgun: { ammo: 8, max: 8, damage: 90, spread: 0.08, cooldown: 18, speed: 0.8 },
+  sniper: { ammo: 5, max: 5, damage: 120, spread: 0.002, cooldown: 40, speed: 1.5 }
 };
 
 let currentWeapon = "rifle";
 let reloading = false;
 
-let pickups = [];
+let bots = [];
 
 export function initGame(scene) {
-
-  createArena(scene);
   spawnWave(scene);
+  spawnBots(scene);
 
-  // 🎮 CONTROLES
   document.addEventListener("keydown", (e) => {
     if (e.key === "1") currentWeapon = "rifle";
     if (e.key === "2") currentWeapon = "shotgun";
     if (e.key === "3") currentWeapon = "sniper";
     if (e.key === "r") reload();
   });
-
-  document.addEventListener("mousedown", (e) => {
-    if (e.button === 2) ads = true;
-  });
-
-  document.addEventListener("mouseup", (e) => {
-    if (e.button === 2) ads = false;
-  });
 }
 
-function createArena(scene) {
-
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(200, 200),
-    new THREE.MeshBasicMaterial({ color: 0x1a1a1a })
-  );
-
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-
-  // paredes externas
-  const wallMat = new THREE.MeshBasicMaterial({ color: 0x333333 });
-
-  const walls = [
-    [-100, 0, 0, 2, 50],
-    [100, 0, 0, 2, 50],
-    [0, 0, -100, 200, 2],
-    [0, 0, 100, 200, 2],
-  ];
-
-  for (let w of walls) {
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(w[3], 3, w[4]),
-      wallMat
-    );
-
-    mesh.position.set(w[0], 1.5, w[2]);
-    scene.add(mesh);
+function spawnBots(scene) {
+  for (let i = 0; i < 3; i++) {
+    bots.push({
+      id: i,
+      mood: "aggressive",
+      flank: Math.random() > 0.5
+    });
   }
 }
 
 function spawnWave(scene) {
-  const count = 8 + wave * 3;
+  const count = 10 + wave * 4;
 
   for (let i = 0; i < count; i++) spawnEnemy(scene);
 }
@@ -96,8 +64,9 @@ function spawnEnemy(scene) {
   enemies.push({
     mesh,
     hp: 100,
-    speed: 0.012 + Math.random() * 0.02,
-    role: Math.random() < 0.3 ? "flank" : "normal"
+    speed: 0.01 + Math.random() * 0.02,
+    id: Math.random(),
+    state: "hunt"
   });
 }
 
@@ -105,7 +74,7 @@ export function updateGame(scene, camera, player) {
 
   waveTimer++;
 
-  if (enemies.length === 0 || waveTimer > 1000) {
+  if (enemies.length === 0 || waveTimer > 1200) {
     wave++;
     waveTimer = 0;
     spawnWave(scene);
@@ -120,84 +89,38 @@ export function updateGame(scene, camera, player) {
 
     toPlayer.normalize();
 
-    let move = toPlayer;
+    // 🧠 IA MAIS HUMANA
+    let move = toPlayer.clone();
 
-    // 🤖 FLANK SYSTEM
-    if (e.role === "flank") {
-      move = new THREE.Vector3(
-        -toPlayer.z,
+    if (dist < 10) {
+      move.add(new THREE.Vector3(
+        Math.sin(e.id + Date.now() * 0.001) * 0.3,
         0,
-        toPlayer.x
-      ).multiplyScalar(0.5).add(toPlayer);
+        Math.cos(e.id + Date.now() * 0.001) * 0.3
+      ));
     }
 
-    // movimentação
-    e.mesh.position.add(move.multiplyScalar(e.speed * (1 + 1 / Math.max(dist, 1))));
+    if (dist < 5) {
+      // comportamento agressivo
+      move.multiplyScalar(1.2);
+    }
 
-    // dano
+    e.mesh.position.add(move.multiplyScalar(e.speed));
+
     if (dist < 1.3) {
       player.hp -= 0.6;
       hitFlash = 10;
     }
   }
 
-  updateLoot(scene, player);
-
   updateHUD(player);
 
   if (hitFlash > 0) {
     hitFlash--;
-    document.body.style.filter = "brightness(1.8)";
+    document.body.style.filter = "brightness(1.8) contrast(1.2)";
   } else {
     document.body.style.filter = "none";
   }
-}
-
-function updateLoot(scene, player) {
-
-  if (pickups.length < 3 && Math.random() < 0.01) {
-    spawnPickup(scene);
-  }
-
-  for (let p of pickups) {
-    const dist = p.position.distanceTo(player.position);
-
-    if (dist < 1.5) {
-
-      if (p.type === "ammo") {
-        weapons[currentWeapon].ammo = weapons[currentWeapon].max;
-      }
-
-      if (p.type === "health") {
-        player.hp = Math.min(100, player.hp + 30);
-      }
-
-      scene.remove(p.mesh);
-      pickups = pickups.filter(x => x !== p);
-    }
-  }
-}
-
-function spawnPickup(scene) {
-
-  const type = Math.random() < 0.5 ? "ammo" : "health";
-
-  const mesh = new THREE.Mesh(
-    new THREE.BoxGeometry(0.6, 0.6, 0.6),
-    new THREE.MeshBasicMaterial({
-      color: type === "ammo" ? 0x00ffcc : 0x00ff00
-    })
-  );
-
-  mesh.position.set(
-    (Math.random() - 0.5) * 100,
-    0.5,
-    (Math.random() - 0.5) * 100
-  );
-
-  scene.add(mesh);
-
-  pickups.push({ mesh, position: mesh.position, type });
 }
 
 export function shoot(scene, camera, player) {
@@ -213,10 +136,9 @@ export function shoot(scene, camera, player) {
 
   const dir = camera.getWorldDirection(new THREE.Vector3());
 
-  const spread = ads ? w.spread * 0.3 : w.spread;
-
-  dir.x += (Math.random() - 0.5) * spread;
-  dir.y += (Math.random() - 0.5) * spread;
+  // 🔫 balística leve (não laser perfeito)
+  dir.x += (Math.random() - 0.5) * w.spread;
+  dir.y += (Math.random() - 0.5) * w.spread;
 
   raycaster.set(camera.position, dir.normalize());
 
@@ -239,7 +161,10 @@ export function shoot(scene, camera, player) {
       }
 
       showHitmarker();
+      playSound("hit");
     }
+  } else {
+    playSound("shoot");
   }
 }
 
@@ -248,6 +173,7 @@ export function reload() {
   if (reloading) return;
 
   reloading = true;
+  playSound("reload");
 
   setTimeout(() => {
     weapons[currentWeapon].ammo = weapons[currentWeapon].max;
@@ -291,6 +217,24 @@ function showHitmarker() {
   m.style.fontWeight = "bold";
 
   document.body.appendChild(m);
-
   setTimeout(() => m.remove(), 60);
+}
+
+function playSound(type) {
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+
+  o.connect(g);
+  g.connect(ctx.destination);
+
+  if (type === "shoot") o.frequency.value = 200;
+  if (type === "hit") o.frequency.value = 500;
+  if (type === "reload") o.frequency.value = 100;
+
+  g.gain.value = 0.05;
+
+  o.start();
+  o.stop(ctx.currentTime + 0.1);
 }
